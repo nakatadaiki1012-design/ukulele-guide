@@ -11,9 +11,14 @@ export const STRING_MIDI  = [67,60,64,69];
 export const FINGER_NAMES = ['','人差し指','中指','薬指','小指'];
 export const FINGER_COLORS= ['','#ff6b6b','#ffb84d','#4dc3ff','#b48cff'];
 
+import { generateChord } from './chordgen.js';
+// 根音（12種類）。black:true はピアノの黒鍵の位置（半音上がった音）。alt はもう1つの呼び方
 export const ROOTS = [
-  {id:'C', read:'シー'},{id:'D', read:'ディー'},{id:'E♭',read:'イーフラット'},{id:'E', read:'イー'},
-  {id:'F', read:'エフ'},{id:'G', read:'ジー'},{id:'A', read:'エー'},{id:'B♭',read:'ビーフラット'},{id:'B', read:'ビー'}
+  {id:'C', read:'シー'}, {id:'C♯', read:'シーシャープ', black:true, alt:'D♭'},
+  {id:'D', read:'ディー'}, {id:'E♭', read:'イーフラット', black:true, alt:'D♯'},
+  {id:'E', read:'イー'}, {id:'F', read:'エフ'}, {id:'F♯', read:'エフシャープ', black:true, alt:'G♭'},
+  {id:'G', read:'ジー'}, {id:'A♭', read:'エーフラット', black:true, alt:'G♯'},
+  {id:'A', read:'エー'}, {id:'B♭', read:'ビーフラット', black:true, alt:'A♯'}, {id:'B', read:'ビー'}
 ];
 export const TYPES = [
   {id:'',    label:'メジャー',  read:'メジャー'},
@@ -21,8 +26,16 @@ export const TYPES = [
   {id:'7',   label:'7',        read:'セブンス'},
   {id:'m7',  label:'m7',       read:'マイナーセブンス'},
   {id:'maj7',label:'maj7',     read:'メジャーセブンス'},
-  {id:'sus4',label:'sus4',     read:'サスフォー'},
-  {id:'6',   label:'6',        read:'シックス'}
+  // ここから下は「その他」を開いた時だけ出す
+  {id:'sus4',label:'sus4',     read:'サスフォー', more:true},
+  {id:'6',   label:'6',        read:'シックス', more:true},
+  {id:'m6',  label:'m6',       read:'マイナーシックス', more:true},
+  {id:'7sus4',label:'7sus4',   read:'セブンス・サスフォー', more:true},
+  {id:'add9',label:'add9',     read:'アドナイン', more:true},
+  {id:'sus2',label:'sus2',     read:'サスツー', more:true},
+  {id:'dim', label:'dim',      read:'ディミニッシュ', more:true},
+  {id:'aug', label:'aug',      read:'オーギュメント', more:true},
+  {id:'m7-5',label:'m7-5',     read:'マイナーセブン・フラットファイブ', more:true}
 ];
 export const B = (fret,from,to)=>({fret,finger:1,from,to});
 export const CHORDS = {
@@ -45,15 +58,22 @@ export const CHORDS = {
   'B':[[4,3,2,2],[3,2,1,1],B(2,2,3)], 'Bm':[[4,2,2,2],[3,1,1,1],B(2,1,3)], 'B7':[[2,3,2,2],[1,2,1,1],B(2,0,3)],
   'Bm7':[[2,2,2,2],[1,1,1,1],B(2,0,3)], 'Bmaj7':[[4,3,2,1],[4,3,2,1]], 'Bsus4':[[4,4,2,2],[2,3,1,1],B(2,2,3)]
 };
+// よく使うのに自動だと珍しい形になるもの（標準の押さえ方）
+Object.assign(CHORDS, {
+  'A♭':[[5,3,4,3],[3,1,2,1],B(3,1,3)], 'C♯':[[1,1,1,4],[1,1,1,4],B(1,0,2)], 'F♯m7':[[2,4,2,4],[1,3,2,4]]
+});
 // 6（シックス）のコード
 Object.assign(CHORDS, {
   'C6':[[0,0,0,0],[0,0,0,0]], 'D6':[[2,2,2,2],[1,1,1,1],B(2,0,3)], 'F6':[[2,2,1,3],[2,3,1,4]],
   'G6':[[0,2,0,2],[0,1,0,2]], 'A6':[[2,4,2,4],[1,3,2,4]]
 });
 
+// 手で書いた押さえ方があればそれを、なければ自動でさがした押さえ方を使う（chordgen.js）
 export function getChord(name){
-  const c = CHORDS[name]; if(!c) return null;
-  return {name, frets:c[0], fingers:c[1], barre:c[2]||null};
+  const c = CHORDS[name];
+  if(c) return {name, frets:c[0], fingers:c[1], barre:c[2]||null};
+  const g = generateChord(name);
+  return g ? {name, frets:g.frets, fingers:g.fingers, barre:g.barre} : null;
 }
 
 export const PROGRESSIONS = [

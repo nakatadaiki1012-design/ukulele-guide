@@ -135,6 +135,19 @@
   .picker .row+.row{margin-top:6px}
   .picker button{flex:1 0 auto;padding:6px 0;min-width:38px;font-weight:700}
   .picker #rootRow button{font-size:16px}
+  /* 根音：ピアノの鍵盤の形（白鍵の上に黒鍵を重ねる） */
+  .picker .keys{position:relative;overflow:visible;padding-top:20px}
+  .picker .keys .white{flex:1 1 0;min-width:0;padding:5px 0}
+  .picker .keys .black{position:absolute;top:0;width:12%;max-width:56px;transform:translateX(-50%);padding:1px 0 2px;
+    font-size:12px!important;line-height:1.1;background:#33414a;color:#fff;border-color:#33414a;z-index:1;min-width:0}
+  .picker .keys .black small{display:block;font-size:9px;font-weight:400;opacity:.7}
+  .picker .keys .black.on{background:var(--on);border-color:var(--on)}
+  .picker .keys .black:hover{border-color:var(--accent)}
+  .picker #typeRow .more{flex:1.3 0 auto;color:var(--sub)}
+  .picker #typeRow .more.on{color:#fff}
+  .picker .typemore{flex-wrap:wrap}
+  .picker .typemore button{flex:1 0 auto;min-width:52px;font-size:13px}
+  .row[hidden]{display:none!important}
   .picker #typeRow button{font-size:13px}
   @media (max-width:640px){
     header p{display:none}
@@ -245,8 +258,9 @@
   <!-- 右：コード選び＋タブ -->
   <div class="side">
     <section class="card picker">
-      <div class="row" id="rootRow"></div>
+      <div class="row keys" id="rootRow"></div>
       <div class="row" id="typeRow"></div>
+      <div class="row typemore" id="typeMore" hidden></div>
     </section>
 
     <section class="card">

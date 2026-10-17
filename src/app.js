@@ -173,23 +173,36 @@ function splitName(name){
   return [R, name.slice(R.length)];
 }
 
-const rootRow = document.getElementById('rootRow'), typeRow = document.getElementById('typeRow');
+/* 根音のボタン：ピアノの鍵盤のように並べる（白鍵7つの間に、半音の黒鍵5つを小さく重ねる）。
+   12種類あっても1段に収まる */
+const rootRow = document.getElementById('rootRow'), typeRow = document.getElementById('typeRow'), typeMore = document.getElementById('typeMore');
+let whites = 0;
 ROOTS.forEach(r=>{
-  const b = document.createElement('button'); b.className='root-btn'; b.textContent=r.id; b.dataset.root=r.id;
+  const b = document.createElement('button'); b.dataset.root = r.id;
+  if(r.black){
+    b.className = 'key black'; b.style.left = `calc(${whites/7*100}% - 1px)`;
+    b.innerHTML = `${r.id}<small>${r.alt}</small>`; b.title = `${r.id}（${r.alt}）`;
+  } else { b.className = 'key white'; b.textContent = r.id; whites++; }
   b.onclick = ()=>{ const t = getChord(r.id+state.type) ? state.type : ''; pickChord(r.id+t); };
   rootRow.appendChild(b);
 });
-TYPES.forEach(t=>{
-  const b = document.createElement('button'); b.textContent=t.label; b.dataset.type=t.id;
-  b.onclick = ()=>pickChord(state.root+t.id);
-  typeRow.appendChild(b);
-});
+/* 種類のボタン：よく使う5つ＋「その他」。その他を押した時だけ、残りの種類の段が出る */
+const typeBtn = t => { const b = document.createElement('button'); b.textContent = t.label; b.dataset.type = t.id;
+  b.onclick = ()=>{ if(!t.more) typeMore.hidden = true; pickChord(state.root+t.id); }; return b; };
+TYPES.filter(t=>!t.more).forEach(t=>typeRow.appendChild(typeBtn(t)));
+const moreBtn = document.createElement('button'); moreBtn.className = 'more'; typeRow.appendChild(moreBtn);
+moreBtn.onclick = ()=>{ typeMore.hidden = !typeMore.hidden; updateButtons(); };
+TYPES.filter(t=>t.more).forEach(t=>typeMore.appendChild(typeBtn(t)));
 function updateButtons(){
   rootRow.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.root===state.root));
-  typeRow.querySelectorAll('button').forEach(b=>{
+  [...typeRow.querySelectorAll('button[data-type]'), ...typeMore.querySelectorAll('button')].forEach(b=>{
     b.classList.toggle('on', b.dataset.type===state.type);
     b.disabled = !getChord(state.root+b.dataset.type);
   });
+  // その他の種類を選んでいる時は、「その他」のボタンにその名前を出す
+  const T = TYPES.find(t=>t.id===state.type);
+  moreBtn.textContent = (T && T.more ? T.label : 'その他') + (typeMore.hidden ? ' ▾' : ' ▴');
+  moreBtn.classList.toggle('on', !!(T && T.more));
 }
 
 // ボタンの切り替え（ひとつだけ選べるグループ）
@@ -272,7 +285,7 @@ function updateFs(){
 function setFS(on){
   fsOn = on;
   document.body.classList.toggle('fs', on);
-  if(on) fsBar.append(rootRow, typeRow); else document.querySelector('.side .picker').append(rootRow, typeRow);
+  if(on) fsBar.append(rootRow, typeRow, typeMore); else document.querySelector('.side .picker').append(rootRow, typeRow, typeMore);
   fsBtn.textContent = on ? '✕' : '⛶'; fsBtn.title = on ? '全画面をやめる' : '全画面';
   try{
     if(on && !document.fullscreenElement) document.documentElement.requestFullscreen?.()?.catch?.(()=>{});
@@ -332,17 +345,20 @@ const customRow = document.getElementById('customRow'), customIn = document.getE
 let customList = ['C','Am','F','G7'];
 try{ const sv = JSON.parse(localStorage.getItem('ukeCustomProg') || 'null'); if(Array.isArray(sv) && sv.length) customList = sv; }catch(e){}
 customIn.value = customList.join(' ');
+const ROOT_ALIAS = {'C#':'C♯','Db':'C♯','D#':'E♭','Eb':'E♭','F#':'F♯','Gb':'F♯','G#':'A♭','Ab':'A♭','A#':'B♭','Bb':'B♭'};
+const TYPE_ALIAS = {'M7':'maj7','Maj7':'maj7','MAJ7':'maj7','△7':'maj7','min':'m','M':'','m7b5':'m7-5','m7(b5)':'m7-5','m7♭5':'m7-5','ø':'m7-5',
+                    'dim7':'dim','°':'dim','o':'dim','+':'aug','+5':'aug','add2':'add9','sus':'sus4','7sus':'7sus4'};
 function normChord(t){
   const m = t.match(/^([a-gA-G])([#♯b♭]?)(.*)$/); if(!m) return null;
-  let root = m[1].toUpperCase(), acc = m[2], rest = m[3];
-  if(acc === 'b' || acc === '♭') root += '♭';
-  else if(acc === '#' || acc === '♯') root = ({C:'D♭', D:'E♭', F:'G♭', G:'A♭', A:'B♭'})[root] || root+'♯';
-  rest = rest.replace(/^M7$|^Maj7$|^MAJ7$/, 'maj7').replace(/^min$/, 'm').replace(/^M$/, '');
+  const acc = m[2] === '♯' ? '#' : m[2] === '♭' ? 'b' : m[2];
+  let root = m[1].toUpperCase() + acc;
+  root = ROOT_ALIAS[root] || root;
+  const rest = TYPE_ALIAS[m[3]] ?? m[3];
   const name = root + rest;
   return getChord(name) ? name : null;
 }
 function readCustom(){
-  const toks = customIn.value.split(/[\s,、→\-・|]+/).filter(Boolean);
+  const toks = customIn.value.split(/[\s,、→・|]+|-(?=[A-Ga-g])/).filter(Boolean);   // 「m7-5」の - は区切りにしない
   const ok = [], bad = [];
   for(const t of toks){ const n = normChord(t); n ? ok.push(n) : bad.push(t); }
   customIn.classList.toggle('bad', bad.length > 0);
