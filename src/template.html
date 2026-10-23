@@ -96,6 +96,54 @@
     body.fs .fsbar #rootRow button{font-size:14px}
   }
   .fsbar .row+.row,.fsbar .fsplay+.row{margin-top:0}
+  /* 内カメラ（ギター・ハンドガイドと同じしくみ） */
+  .cambtn{right:82px}
+  .cambtn.on{background:var(--accent);color:#fff}
+  .camwin{position:absolute;bottom:30px;right:8px;z-index:6;border-radius:12px;overflow:hidden;background:#000;box-shadow:0 4px 18px rgba(0,0,0,.35);touch-action:none;cursor:move}
+  .camwin.s{width:22%} .camwin.m{width:32%} .camwin.l{width:46%}
+  @media (max-width:640px){.camwin.s{width:32%} .camwin.m{width:44%} .camwin.l{width:62%}}
+  .camwin video{display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover}
+  .camwin video.flip{transform:scaleX(-1)}
+  .camwin .cammsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:10px;color:#fff;font-size:12px;text-align:center;background:#000c}
+  .camwin .cammsg.on{display:flex}
+  .camctl{position:absolute;left:0;right:0;bottom:0;display:flex;gap:3px;justify-content:flex-end;padding:4px;background:linear-gradient(transparent,#0008)}
+  .camctl button{font-size:11px;padding:2px 6px;background:#fffd;border:0;border-radius:6px;white-space:nowrap}
+  .camctl{flex-wrap:wrap}
+  .camwin.s .camctl #camMatch{display:none}
+  /* 全画面でカメラを並べた時：コードと再生のバーは3Dの側に置く（カメラの上に重ねない） */
+  body.fs .fsbar{z-index:7}
+  body.fs #mainWrap.camside .fsbar{left:25%;width:calc(50% - 16px)}
+  @media (orientation:portrait){ body.fs #mainWrap.camside .fsbar{left:50%;width:calc(100% - 16px);bottom:calc(50% + 8px)} }
+  body.fs #mainWrap.camside .camwin video{height:100%;aspect-ratio:auto}
+  .camctl #camMatch{margin-right:auto}
+  /* 並べる表示：3Dとカメラを重ねずに、横（スマホの縦向きでは上下）に並べる */
+  #mainWrap.camside{display:flex;align-items:stretch}
+  #mainWrap.camside #handView{width:50%;aspect-ratio:8/9}
+  #mainWrap.camside #handView.split{aspect-ratio:1/1}
+  #mainWrap.camside .camwin{position:relative;inset:auto;width:50%;border-radius:0;box-shadow:none;cursor:default;border-left:2px solid #fff}
+  #mainWrap.camside .camwin video{height:100%;aspect-ratio:auto}
+  #mainWrap.camside .hint{display:none}
+  #mainWrap.camside .overlay{right:50%}
+  #mainWrap.camside #gearBtn{right:calc(50% + 6px)} #mainWrap.camside #fsBtn{right:calc(50% + 44px)} #mainWrap.camside #camBtn{right:calc(50% + 82px)}
+  #mainWrap.camside .settings{right:calc(50% + 8px)}
+  @media (max-width:640px){
+    #mainWrap.camside #gearBtn{right:6px} #mainWrap.camside #fsBtn{right:44px} #mainWrap.camside #camBtn{right:82px} #mainWrap.camside .settings{right:8px}
+    #mainWrap.camside{flex-direction:column}
+    #mainWrap.camside #handView,#mainWrap.camside #handView.split{width:100%;aspect-ratio:4/3}
+    #mainWrap.camside .camwin{width:100%;border-left:0;border-top:2px solid #fff}
+    #mainWrap.camside .camwin video{aspect-ratio:4/3;height:auto}
+    #mainWrap.camside .overlay{right:0;bottom:50%}
+    #mainWrap.camside .chordCard{bottom:calc(50% + 6px)}
+  }
+  body.fs #mainWrap.camside #handView,body.fs #mainWrap.camside #handView.split{width:50%;height:100%;aspect-ratio:auto}
+  body.fs #mainWrap.camside .camwin{height:100%}
+  @media (orientation:portrait){
+    body.fs #mainWrap.camside{flex-direction:column}
+    body.fs #mainWrap.camside #handView,body.fs #mainWrap.camside #handView.split{width:100%;height:50%}
+    body.fs #mainWrap.camside .camwin{width:100%;height:50%;border-left:0;border-top:2px solid #fff}
+    body.fs #mainWrap.camside .overlay{right:0;bottom:50%}
+    body.fs #mainWrap.camside #gearBtn{right:6px} body.fs #mainWrap.camside #fsBtn{right:44px} body.fs #mainWrap.camside #camBtn{right:82px}
+  }
   .settings{position:absolute;z-index:20;top:62px;right:16px;width:min(330px,calc(100% - 32px));max-height:min(78vh,560px);overflow:auto;
     background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(20,40,50,.22);padding:10px 12px 12px}
   .set-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
@@ -233,6 +281,19 @@
       <button class="vsel vsel2" id="angle2Btn" title="右の画面の向き" hidden>🎥 正面</button>
       <button class="gear" id="gearBtn" title="設定（背景・ウクレレの柄・表示）" aria-label="設定">⚙</button>
       <button class="gear fsbtn" id="fsBtn" title="全画面" aria-label="全画面">⛶</button>
+      <button class="gear cambtn" id="camBtn" title="内カメラで自分の手を映して、3Dと見比べる" aria-label="カメラ">📷</button>
+      <!-- 内カメラの小窓（ドラッグで動かせる） -->
+      <div class="camwin m" id="camWin" hidden>
+        <video id="camVideo" playsinline muted autoplay></video>
+        <div class="cammsg" id="camMsg"></div>
+        <div class="camctl">
+          <button id="camMatch" title="3Dを、カメラに映る自分と同じ向き（正面・左右反転）にする">3Dを合わせる</button>
+          <button id="camLayoutBtn" title="3Dと並べる／3Dの上に小窓で重ねる">小窓にする</button>
+          <button id="camFlip" title="カメラの左右反転">⇋</button>
+          <button id="camSize" title="大きさを変える">⤢</button>
+          <button id="camClose" title="カメラを止める">✕</button>
+        </div>
+      </div>
       <!-- 全画面の時だけ：3D画面の下にコードのボタンと再生ボタンを重ねる -->
       <div class="picker fsbar" id="fsBar">
         <div class="fsplay"><button id="fsName" class="chip" title="押すと 練習／曲デモ を切り替え"></button><button id="fsPlay" class="play">▶</button></div>

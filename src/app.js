@@ -12,7 +12,7 @@ import { PATTERNS, strumState, idleState, STRUM_AMP } from './strum.js';
 const state = {root:'C', type:'', mirror:false, badges:true, ghost:true, rightMode:'always', speed:1, swing:false, split:false, vib:[0,0,0,0],
                bg:'day', finish:'mahogany', chart:true};
 // 設定は次に開いた時も同じになるように覚えておく（覚えられない端末ではそのまま）
-const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart'];
+const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam'];
 try{ const sv = JSON.parse(localStorage.getItem('ukeSettings') || '{}'); for(const k of SAVED) if(k in sv) state[k] = sv[k]; }catch(e){}
 const saveSettings = () => { try{ localStorage.setItem('ukeSettings', JSON.stringify(Object.fromEntries(SAVED.map(k=>[k, state[k]])))); }catch(e){} };
 let view = null, rig = null;
@@ -298,6 +298,74 @@ document.addEventListener('fullscreenchange', ()=>{ if(!document.fullscreenEleme
 document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && fsOn) setFS(false); });
 fsPlay.onclick = ()=>{ document.getElementById(activeTab() === 'practice' ? 'btnProg' : 'btnSong').click(); updateFs(); };
 fsName.onclick = ()=>{ document.querySelector(`[data-tab="${activeTab() === 'practice' ? 'songs' : 'practice'}"]`).click(); updateFs(); };
+/* ---------- 内カメラの小窓：自分の手を映して、3Dの手と見比べながら練習する ----------
+   ・カメラの映像はこの端末の中だけで表示する（どこにも送らない・保存しない）
+   ・ふつうは3Dの横（スマホの縦向きでは下）に並べて、3Dの手と重ならないようにする
+   ・「小窓にする」で3Dの上に重ねる小窓にもできる。小窓はドラッグで好きな場所へ、大きさは 小・中・大
+   ・左右反転（鏡のように見える）も切り替えられる
+   ・「3Dを合わせる」：3Dを正面（向かい合った向き）＋左右反転にして、鏡に映った自分と同じ向きにする */
+const camBtn = document.getElementById('camBtn'), camWin = document.getElementById('camWin');
+const camVideo = document.getElementById('camVideo'), camMsg = document.getElementById('camMsg');
+state.cam = {size:'m', flip:true, x:null, y:null, layout:'side', ...(state.cam || {})};
+let camStream = null;
+function camLayout(){
+  const side = state.cam.layout === 'side' && !camWin.hidden;
+  document.getElementById('mainWrap').classList.toggle('camside', side);
+  camWin.classList.remove('s','m','l'); if(!side) camWin.classList.add(state.cam.size);
+  camVideo.classList.toggle('flip', state.cam.flip);
+  document.getElementById('camSize').hidden = side;
+  document.getElementById('camLayoutBtn').textContent = side ? '小窓にする' : '並べる';
+  if(!side && state.cam.x != null){ camWin.style.left = state.cam.x*100 + '%'; camWin.style.top = state.cam.y*100 + '%'; camWin.style.right = camWin.style.bottom = 'auto'; }
+  else camWin.style.left = camWin.style.top = camWin.style.right = camWin.style.bottom = '';
+  kick();
+}
+async function camStart(){
+  camWin.hidden = false; camBtn.classList.add('on'); camLayout();
+  camMsg.className = 'cammsg on'; camMsg.textContent = 'カメラを準備中…';
+  try{
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('nosupport');
+    camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user', width:{ideal:1280}, height:{ideal:720}}, audio:false});
+    camVideo.srcObject = camStream; await camVideo.play().catch(()=>{});
+    camMsg.className = 'cammsg';
+  }catch(e){
+    camMsg.textContent = e.message === 'nosupport' ? 'この画面ではカメラが使えません（https のページで開いてください）'
+      : e.name === 'NotAllowedError' ? 'カメラの使用が許可されませんでした。ブラウザの設定でカメラを許可してください'
+      : e.name === 'NotFoundError' ? 'カメラが見つかりませんでした' : 'カメラを開けませんでした';
+  }
+}
+function camStop(){
+  camStream && camStream.getTracks().forEach(t=>t.stop()); camStream = null;
+  camVideo.srcObject = null; camWin.hidden = true; camBtn.classList.remove('on'); camLayout();
+}
+camBtn.onclick = ()=> camStream || !camWin.hidden ? camStop() : camStart();
+document.getElementById('camClose').onclick = camStop;
+document.getElementById('camLayoutBtn').onclick = ()=>{ state.cam.layout = state.cam.layout === 'side' ? 'pip' : 'side'; camLayout(); saveSettings(); };
+document.getElementById('camFlip').onclick = ()=>{ state.cam.flip = !state.cam.flip; camLayout(); saveSettings(); };
+document.getElementById('camSize').onclick = ()=>{ state.cam.size = {s:'m', m:'l', l:'s'}[state.cam.size]; camLayout(); saveSettings(); };
+document.getElementById('camMatch').onclick = ()=>{
+  angle1 = 'front'; document.getElementById('angleBtn').textContent = '🎥 ' + VIEWS.front.label;
+  if(view) view.setView('front');
+  state.mirror = true; applyToggles(); saveSettings(); kick();
+};
+// ドラッグで動かす（ボタンの上ではドラッグしない）
+{
+  let drag = null;
+  camWin.addEventListener('pointerdown', e=>{
+    if(e.target.closest('button') || state.cam.layout === 'side') return;
+    e.stopPropagation(); e.preventDefault();
+    const r = camWin.getBoundingClientRect(), pr = camWin.parentElement.getBoundingClientRect();
+    drag = {dx: e.clientX - r.left, dy: e.clientY - r.top, pr, w: r.width, h: r.height};
+    camWin.setPointerCapture(e.pointerId);
+  });
+  camWin.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    const {pr, w, h} = drag;
+    const x = Math.min(pr.width - w, Math.max(0, e.clientX - pr.left - drag.dx)), y = Math.min(pr.height - h, Math.max(0, e.clientY - pr.top - drag.dy));
+    state.cam.x = x / pr.width; state.cam.y = y / pr.height; camLayout();
+  });
+  const end = ()=>{ if(drag){ drag = null; saveSettings(); } };
+  camWin.addEventListener('pointerup', end); camWin.addEventListener('pointercancel', end);
+}
 // タブ（練習／曲デモ）
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick = ()=>{
   document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('on', x===b));
