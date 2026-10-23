@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { buildUkulele } from './uke.js';
 import { createBackdrop } from './backdrop.js';
+import { Q } from './quality.js';
 import { loadHand, applyPose } from './handrig.js';
 import { rightHandPose, STRUM_X } from './strum.js';
 import { slotCenter, halfW, strY, stringZ, STRING_R, FRET_TOP, DEG } from './geom.js';
@@ -26,9 +27,10 @@ const UP = [0,-1,0];
 
 export async function createView({mainCanvas, mainOverlay, onTap}){
   const mkRenderer = canvas => {
-    const r = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false, powerPreference:'high-performance'});
-    r.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.5));
-    r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;   // やわらかい影より軽い方式
+    const r = new THREE.WebGLRenderer({canvas, antialias:Q.aa, alpha:false, powerPreference:'high-performance'});
+    r.setPixelRatio(Math.min(window.devicePixelRatio||1, Q.pr));
+    r.shadowMap.enabled = Q.shadow > 0; r.shadowMap.type = THREE.PCFShadowMap;   // やわらかい影より軽い方式
+    r.shadowMap.autoUpdate = false;                                       // 影は、手が動いた時だけ描き直す（カメラを回すだけなら前の影のまま）
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
     r.outputColorSpace = THREE.SRGBColorSpace;
     return r;
@@ -44,8 +46,10 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
   scene.add(hemi);
   const key = new THREE.DirectionalLight('#fff6ea', 2.6);
   key.position.set(-160, -420, 380);   // 空の高い所（-y）・客席側（+z）から
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  key.castShadow = !!Q.shadow;                                            // 「軽い」では影なし
+  key.shadow.mapSize.set(Q.shadow || 512, Q.shadow || 512);
+  let shadowDirty = true;                                                 // 影を描き直す必要があるか
+  const touch = () => { shadowDirty = true; requestRender && requestRender(); };
   Object.assign(key.shadow.camera, {left:-300, right:300, top:300, bottom:-300, near:50, far:1400});
   key.target.position.set(150, 0, -40);
   key.shadow.bias = -0.0004; key.shadow.normalBias = 0.8;
@@ -157,8 +161,10 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
     c.enablePan = true; c.screenSpacePanning = true; c.panSpeed = 0.8;
     c.minDistance = 120; c.maxDistance = 900;
     c.rotateSpeed = 0.7; c.zoomSpeed = 0.8;
+    c.enableDamping = true; c.dampingFactor = 0.12;                      // 慣性：指を離してもスッとなめらかに止まる
     c.touches = {ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN};
     c.addEventListener('change', ()=>requestRender && requestRender());
+    c.addEventListener('start', ()=>requestRender && requestRender());
     c.update();
     return c;
   }
@@ -224,16 +230,23 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
   }
   const project = (cam, p, W, H) => { const v = new THREE.Vector3(...p).project(cam); if(v.z > 1) return null; return [(v.x+1)/2*W, (1-v.y)/2*H]; };
 
-  const basePR = Math.min(window.devicePixelRatio||1, 1.5);
-  let curPR = basePR;
+  const basePR = Math.min(window.devicePixelRatio||1, Q.pr);
+  let curPR = basePR, lastPose = null, lastGhost = null;
   function render(pose, opts){
     // 動いている間は解像度を少し下げる（重い端末でカクカクしないように）
     const pr = Math.max(0.75, Math.round(basePR*(opts.quality ?? 1)*20)/20);
     if(pr !== curPR){ curPR = pr; renderer.setPixelRatio(pr); }
-    applyPose(rig, pose);
-    uke.setStrings(pose.str);
-    setGhost(!!opts.ghost);
-    placeMarks(pose, !!opts.ghost);
+    // 左手：形が前と同じ（カメラを回しただけ）なら、計算し直さない
+    if(pose !== lastPose || !!opts.ghost !== lastGhost){
+      lastPose = pose; lastGhost = !!opts.ghost; shadowDirty = true;
+      applyPose(rig, pose);
+      uke.setStrings(pose.str);
+      setGhost(!!opts.ghost);
+      placeMarks(pose, !!opts.ghost);
+    }
+    if(opts.animating && opts.right) shadowDirty = true;                  // 右手が動いている（演奏中）
+    if(rigR.root.visible !== !!opts.right) shadowDirty = true;
+    renderer.shadowMap.needsUpdate = shadowDirty; shadowDirty = false;
     // 右手
     rigR.root.visible = !!opts.right;
     if(opts.right){ const rp = rightHandPose(rigR, opts.right); window.__rp = rp; applyPose(rigR, rp); }
@@ -293,12 +306,19 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
   return {
     render, setView, rig, rigR, rightHandPose, get info(){ return renderer.info; },
     setView2,
-    setBackdrop: name => backdrop.set(name),
-    setFinish: name => uke.setFinish(name),
+    setBackdrop: name => { backdrop.set(name); touch(); },
+    setFinish: name => { uke.setFinish(name); touch(); },
+    // 毎コマ呼ぶ：カメラの慣性を進める。カメラがまだ動いていれば true
+    tick(){
+      let ch = false;
+      if(controls) ch = controls.update() || ch;
+      if(controls2 && splitOn) ch = controls2.update() || ch;
+      return ch || activePtr > 0;
+    },
     // 処理が重い端末向け：影を切る（いちど切ると戻さない）
     setShadows(on){
       if(key.castShadow === on) return;
-      key.castShadow = on;
+      key.castShadow = on; shadowDirty = true;
       scene.traverse(o=>{ if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate = true); } });
     }, get cams(){ return [camera.position.toArray(), camera2.position.toArray(), controls.target.toArray()]; },
     setSplit(on){ splitOn = on; if(!on){ controls.enabled = true; if(controls2) controls2.enabled = false; } },

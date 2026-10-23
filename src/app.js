@@ -6,6 +6,7 @@ import { computePose, blendPose, HAND_CFG } from './pose.js';
 window.__cfg = HAND_CFG;
 import { createView, VIEWS } from './view.js';
 import { BACKDROPS } from './backdrop.js';
+import { TIERS, DETECTED, QUALITY_LEVEL, setQualityLevel } from './quality.js';
 import { FINISHES } from './uke.js';
 import { PATTERNS, strumState, idleState, STRUM_AMP } from './strum.js';
 
@@ -244,6 +245,10 @@ const BG_SW = {day:'#7fd3cc', sunset:'#f0805a', night:'#1f2d55', house:'#b0805a'
 choiceRow('optBg', Object.entries(BACKDROPS).map(([k,b])=>[k, b.label, BG_SW[k]]), 'bg', ()=>view && view.setBackdrop(state.bg));
 choiceRow('optFinish', Object.entries(FINISHES).map(([k,f])=>[k, f.label, f.paint || f.top.light]), 'finish', ()=>view && view.setFinish(state.finish));
 choiceRow('optRight', RMODES, 'rightMode', ()=>{});
+// 軽さ（画質）：変えると読み込み直す
+state.qlevel = QUALITY_LEVEL;
+choiceRow('optQuality', [['auto', `自動（この端末：${TIERS[DETECTED.tier].label}）`], ...Object.entries(TIERS).map(([k,t])=>[k, t.label])], 'qlevel',
+  ()=>{ setQualityLevel(state.qlevel); location.reload(); });
 // オン・オフのボタン
 const TOGGLES = [['split','▥ 2画面'],['ghost','半透明'],['badges','指番号'],['mirror','左右反転'],['chart','コード表']];
 const showEl = document.getElementById('optShow');
@@ -734,7 +739,8 @@ function loop(now){
   const handMoving = !!poseFrom;
   const active = !!pl || !!oneShot;
   const showRight = state.rightMode === 'always' || (state.rightMode === 'playing' && active);
-  const moving = handMoving || active;
+  const camMoving = view.tick();                                   // カメラを回している・慣性で動いている間も「動いている」扱い（解像度を自動で下げる）
+  const moving = handMoving || active || camMoving;
   if(moving && wasMoving){
     frameAvg = frameAvg*0.9 + Math.min(100, now - lastFrame)*0.1;
     if(frameAvg > 24 && quality > 0.5) { quality = Math.max(0.5, quality - 0.1); frameAvg = 16; }
@@ -752,7 +758,7 @@ function loop(now){
       else highlightSong(ph < 0 || ph >= pl.end ? -1 : Math.floor(ph/pl.spb));
     } else pose = currentPose(now);
     const right = window.__forceRight || smoothRight(showRight ? rightState(now, pl, phR) : null, now);
-    view.render(pose, {...state, right, quality: moving ? quality : 1});
+    view.render(pose, {...state, right, quality: moving ? quality : 1, animating: handMoving || active});
     dirty = false;
   }
   wasMoving = moving;

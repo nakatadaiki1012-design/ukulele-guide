@@ -6,9 +6,12 @@
    画像ファイルは使わず、その場で描いた絵を貼るだけ。選んだ時に初めて作り、あとは使い回す
    ========================================================= */
 import * as THREE from 'three';
+import { Q } from './quality.js';
+// 軽さ：絵の大きさは D 倍（描く座標はそのままで、キャンバスだけ小さくする）、模様の数は Q.bg 倍
+const D = Math.sqrt(Q.bg), CNT = n => Math.max(1, Math.round(n*Q.bg));
 
 function rng(seed){ return ()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; }; }
-const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; };
+const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = Math.round(w*D); c.height = Math.round(h*D); const g = c.getContext('2d'); g.scale(D, D); return [c, g]; };
 const tex = (c, repeat) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   if(repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
 
@@ -22,7 +25,7 @@ function sandGrain(){
   const N = 512, [c, g] = canvas(N, N), r = rng(11);
   g.fillStyle = '#d9c7a0'; g.fillRect(0, 0, N, N);
   const cols = ['rgba(255,250,235,0.35)','rgba(170,138,98,0.25)','rgba(120,100,80,0.18)','rgba(235,215,180,0.4)','rgba(90,80,75,0.12)'];
-  for(let i=0;i<30000;i++){ g.fillStyle = cols[(r()*cols.length)|0]; g.beginPath(); g.arc(r()*N, r()*N, 0.5+r()*1.1, 0, 6.283); g.fill(); }
+  for(let i=0;i<CNT(30000);i++){ g.fillStyle = cols[(r()*cols.length)|0]; g.beginPath(); g.arc(r()*N, r()*N, 0.5+r()*1.1, 0, 6.283); g.fill(); }
   for(let i=0;i<40;i++){ g.fillStyle = `rgba(250,240,225,${0.5+r()*0.4})`; g.beginPath(); g.ellipse(r()*N, r()*N, 1.5+r()*3, 1+r()*2, r()*3, 0, 6.283); g.fill(); }
   return c;
 }
@@ -30,7 +33,7 @@ function grassGrain(){
   const N = 512, [c, g] = canvas(N, N), r = rng(17);
   g.fillStyle = '#5f8f3a'; g.fillRect(0, 0, N, N);
   const greens = ['#4a7a2c','#6fa045','#86b555','#3d6824','#9cc466','#557f30'];
-  for(let i=0;i<9000;i++){                       // 草の葉：短い線をいろいろな向き・緑で
+  for(let i=0;i<CNT(9000);i++){                  // 草の葉：短い線をいろいろな向き・緑で
     const x = r()*N, y = r()*N, l = 4+r()*10, a = -1.9 + (r()-0.5)*1.4;
     g.strokeStyle = greens[(r()*greens.length)|0]; g.globalAlpha = 0.5+r()*0.5; g.lineWidth = 0.8+r()*1.4;
     g.beginPath(); g.moveTo(x, y); g.lineTo(x+Math.cos(a)*l, y+Math.sin(a)*l); g.stroke();
@@ -79,13 +82,13 @@ function shoreTexture(o){
   st(SHORE_Z, Wt[0]); st(SHORE_Z-250, Wt[1]); st(SHORE_Z-900, Wt[2]);         // 泡 → 浅瀬
   st(SHORE_Z-3000, Wt[3]); st(SHORE_Z-7000, Wt[4]); st(FAR_Z, Wt[5]);
   g.fillStyle = grd; g.fillRect(0, 0, W, H);
-  for(let i=0;i<900;i++){                         // 乾いた砂のまだら
+  for(let i=0;i<CNT(900);i++){                    // 乾いた砂のまだら
     const x = r()*W, y = shoreY + 40 + r()*(H-shoreY-40), rr = 20+r()*90;
     g.fillStyle = r()<0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(140,110,70,0.05)';
     g.beginPath(); g.ellipse(x, y, rr*1.6, rr, 0, 0, 6.283); g.fill();
   }
   g.lineWidth = 1.2;
-  for(let i=0;i<260;i++){                         // 風紋
+  for(let i=0;i<CNT(260);i++){                    // 風紋
     const y0 = shoreY + 80 + r()*(H-shoreY-80), x0 = r()*W, len = 60+r()*220, ph = r()*6;
     g.strokeStyle = `rgba(150,120,80,${0.05+r()*0.06})`; g.beginPath();
     for(let k=0;k<=len;k+=6){ const x = x0+k, y = y0 + Math.sin(k/40+ph)*3; k?g.lineTo(x,y):g.moveTo(x,y); }
@@ -99,9 +102,9 @@ function shoreTexture(o){
   };
   wave(shoreY+3, 5, 0.95, 4); wave(shoreY-4, 6, 0.6, 2);
   wave(shoreY-22, 7, 0.45, 3); wave(shoreY-50, 8, 0.3, 2); wave(shoreY-110, 9, 0.18, 2); wave(shoreY-200, 10, 0.1, 2);
-  for(let i=0;i<3000;i++){ g.fillStyle = `rgba(255,255,255,${(0.05+r()*0.18)*o.sparkle})`; g.fillRect(r()*W, r()*(shoreY-20), 1+r()*5, 1); }
+  for(let i=0;i<CNT(3000);i++){ g.fillStyle = `rgba(255,255,255,${(0.05+r()*0.18)*o.sparkle})`; g.fillRect(r()*W, r()*(shoreY-20), 1+r()*5, 1); }
   if(o.glitter){                                  // 太陽・月の光の道（正面の奥から手前へ）
-    for(let i=0;i<5000;i++){
+    for(let i=0;i<CNT(5000);i++){
       const y = r()*(shoreY-30), spread = 30 + (1 - y/shoreY)*0 + (y/shoreY)*120;
       const x = W/2 + (r()+r()+r()-1.5)*spread;
       g.fillStyle = `rgba(${o.glitter},${0.25+r()*0.6})`; g.fillRect(x, y, 2+r()*9, 1+r()*1.2);
@@ -112,12 +115,12 @@ function shoreTexture(o){
 function meadowTexture(){
   const W = 1024, H = 2048, [c, g] = canvas(W, H), r = rng(31);
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
-  for(let i=0;i<1400;i++){                        // 明るい所・暗い所のむら
+  for(let i=0;i<CNT(1400);i++){                   // 明るい所・暗い所のむら
     const x = r()*W, y = r()*H, rr = 15+r()*110;
     g.fillStyle = r()<0.5 ? 'rgba(255,255,210,0.10)' : 'rgba(40,70,20,0.10)';
     g.beginPath(); g.ellipse(x, y, rr*1.5, rr, r()*3, 0, 6.283); g.fill();
   }
-  for(let i=0;i<220;i++){                         // 花の群れ
+  for(let i=0;i<CNT(220);i++){                    // 花の群れ
     const x = r()*W, y = r()*H*0.8, col = ['255,250,235','255,226,90','215,190,255'][(r()*3)|0];
     for(let k=0;k<30;k++){ g.fillStyle = `rgba(${col},0.7)`; g.fillRect(x+(r()-0.5)*40, y+(r()-0.5)*16, 2, 2); }
   }
@@ -136,11 +139,11 @@ function skyTexture(o){
   g.fillStyle = grd; g.fillRect(0, 0, W, H);
   const P = (u, v) => [u*W, (1-v)*H];
   if(o.stars){
-    for(let i=0;i<o.stars;i++){ const v = 0.52 + Math.pow(r(), 0.7)*0.48, [x, y] = P(r(), v), s = r();
+    for(let i=0;i<CNT(o.stars);i++){ const v = 0.52 + Math.pow(r(), 0.7)*0.48, [x, y] = P(r(), v), s = r();
       g.fillStyle = `rgba(255,255,255,${0.3+s*0.7})`; g.fillRect(x, y, s>0.95?2.5:1.2, s>0.95?2.5:1.2); }
   }
   if(o.clouds){
-    for(let i=0;i<o.clouds;i++){
+    for(let i=0;i<CNT(o.clouds);i++){
       const [cx, cy] = P(r(), 0.54 + r()*0.25), w = 80+r()*220;
       for(let k=0;k<14;k++){ const gx = cx+(r()-0.5)*w, gy = cy+(r()-0.5)*w*0.12, rr = w*(0.08+r()*0.12);
         const gr = g.createRadialGradient(gx, gy, 0, gx, gy, rr); gr.addColorStop(0, `rgba(${o.cloudCol},0.55)`); gr.addColorStop(1, `rgba(${o.cloudCol},0)`);
@@ -164,7 +167,7 @@ function skyTexture(o){
       g.lineTo(W, H/2+4); g.lineTo(0, H/2+4); g.fill(); };
     layer('#a9c7b4', 0.5, 0.035, 3, 1); layer('#86ad86', 0.5, 0.022, 5, 2.5);
     g.fillStyle = '#5f8a5c';
-    for(let i=0;i<160;i++){ const [x, y] = P(r(), 0.502); const s = 3+r()*6; g.beginPath(); g.arc(x, y-s, s, 0, 6.283); g.fill(); g.fillRect(x-0.8, y-s, 1.6, s); }
+    for(let i=0;i<CNT(160);i++){ const [x, y] = P(r(), 0.502); const s = 3+r()*6; g.beginPath(); g.arc(x, y-s, s, 0, 6.283); g.fill(); g.fillRect(x-0.8, y-s, 1.6, s); }
   }
   return tex(c);
 }
@@ -203,7 +206,7 @@ function farPlane(color){                                    // 地面のさら�
   return m;
 }
 function skyDome(t){
-  const m = new THREE.Mesh(new THREE.SphereGeometry(50000, 48, 24),
+  const m = new THREE.Mesh(new THREE.SphereGeometry(50000, Q.bg < 1 ? 24 : 48, Q.bg < 1 ? 12 : 24),
     new THREE.MeshBasicMaterial({map: t, side: THREE.BackSide, depthWrite: false, fog: false}));
   m.rotation.x = Math.PI;                                    // 球の上 +y を空の上 -y に向ける
   m.position.y = GROUND_Y;

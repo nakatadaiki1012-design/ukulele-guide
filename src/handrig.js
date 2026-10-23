@@ -9,6 +9,7 @@ import leftGlb from '../node_modules/@webxr-input-profiles/assets/dist/profiles/
 import rightGlb from '../node_modules/@webxr-input-profiles/assets/dist/profiles/generic-hand/right.glb';
 import { sub, vlen, norm, cross, dot, mul } from './geom.js';
 import { smoothSkinnedGeometry } from './subdivide.js';
+import { Q } from './quality.js';
 
 export const FINGER_KEYS = ['', 'index', 'middle', 'ring', 'pinky'];
 const FINGER_JOINTS = ['metacarpal','phalanx-proximal','phalanx-intermediate','phalanx-distal','tip'];
@@ -37,7 +38,7 @@ export async function loadHand(skinMaterial, side='left'){
   const newInv = [...sk.boneInverses.map(m=>m.clone()), sk.boneInverses[wristIdx].clone()];
   extendForearm(mesh.geometry, bones['wrist'], wristIdx, sk.bones.length);
   sharpenWebs(mesh.geometry, bones, sk.bones);
-  mesh.geometry = smoothSkinnedGeometry(mesh.geometry, 2);
+  mesh.geometry = smoothSkinnedGeometry(mesh.geometry, Q.subdiv);   // 軽さの設定で、なめらかにする回数を変える
   mesh.bind(new THREE.Skeleton(newBones, newInv), mesh.bindMatrix);
   mesh.material = skinMaterial;
   mesh.castShadow = true; mesh.receiveShadow = true;

@@ -2,14 +2,16 @@
    ウクレレの3Dモデル（コンサートサイズ・実寸）
    ========================================================= */
 import * as THREE from 'three';
+import { Q } from './quality.js';
 import { fretX, slotCenter, halfW, strY, STRING_R, stringZ, FRET_TOP, NECK_DEPTH,
          BODY_X0, BODY_LEN, BODY_DEPTH, FB_END, HEAD_LEN, NUM_FRETS, SCALE_LEN } from './geom.js';
 
 /* ---------- 木目テクスチャ（その場で描く） ---------- */
 function rng(seed){ return ()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; }; }
 function woodTexture({base, dark, light, w=1024, h=256, lines=140, wave=6, seed=1, figure=0}){
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const g = c.getContext('2d'), r = rng(seed);
+  // 軽さの設定：絵のキャンバスだけ小さくする（描く座標はそのまま）
+  const c = document.createElement('canvas'); c.width = Math.round(w*Q.tex); c.height = Math.max(16, Math.round(h*Q.tex));
+  const g = c.getContext('2d'), r = rng(seed); g.scale(c.width/w, c.height/h);
   g.fillStyle = base; g.fillRect(0,0,w,h);
   for(let i=0;i<lines;i++){
     const y0 = r()*h, amp = 1+r()*wave, ph = r()*6.28, f = 0.5+r()*2;
