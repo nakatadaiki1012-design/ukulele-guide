@@ -8,7 +8,8 @@ import { createView, VIEWS } from './view.js';
 import { BACKDROPS } from './backdrop.js';
 import { TIERS, DETECTED, QUALITY_LEVEL, setQualityLevel } from './quality.js';
 import { FINISHES } from './uke.js';
-import { PATTERNS, strumState, idleState, STRUM_AMP } from './strum.js';
+import { PATTERNS, strumState, idleState, STRUM_AMP, STRUM_CFG } from './strum.js';
+window.__strumCfg = STRUM_CFG;
 
 const state = {root:'C', type:'', mirror:false, badges:true, ghost:true, rightMode:'always', speed:1, swing:false, split:false, vib:[0,0,0,0],
                bg:'day', finish:'mahogany', chart:true};
@@ -709,7 +710,7 @@ function rightState(now, pl, ph){
     const t = (now - oneShot.start)/state.speed;
     if(t < ONE_DOWN){ const u = t/ONE_DOWN; return {...strumState(u-0.5, 'D-'), lift: 0}; }
     if(t < ONE_DOWN+ONE_BACK){ const u = (t-ONE_DOWN)/ONE_BACK, e = (1-Math.cos(Math.PI*u))/2;
-      return {theta: STRUM_AMP*(1-2*e), lift: 7*Math.sin(Math.PI*Math.min(1,u*1.3)), wrist: -10*(1-2*e), roll: 6*(1-2*e), flick: -6*Math.sin(Math.PI*u)}; }
+      return {theta: STRUM_AMP*(1-2*e), lift: 7*Math.sin(Math.PI*Math.min(1,u*1.3)), wrist: -10*(1-2*e), roll: 6*(1-2*e), flick: -6*Math.sin(Math.PI*u), v: -Math.sin(Math.PI*u)}; }
     oneShot = null;
   }
   return idleState(now/1000);
@@ -731,9 +732,9 @@ function smoothRight(target, now){
   if(!rSmooth){ rSmooth = {...target}; return rSmooth; }
   const dt = Math.min(0.1, Math.max(0, (now - (rSmooth.t||now))/1000));
   const k = 1 - Math.exp(-dt/0.018);
-  for(const key of ['theta','lift','wrist','roll','flick']) rSmooth[key] = (rSmooth[key] ?? 0) + ((target[key] ?? 0) - (rSmooth[key] ?? 0))*k;
+  for(const key of ['theta','lift','wrist','roll','flick','v']) rSmooth[key] = (rSmooth[key] ?? 0) + ((target[key] ?? 0) - (rSmooth[key] ?? 0))*k;
   rSmooth.t = now;
-  return {theta: rSmooth.theta, lift: rSmooth.lift, wrist: rSmooth.wrist, roll: rSmooth.roll, flick: rSmooth.flick};
+  return {theta: rSmooth.theta, lift: rSmooth.lift, wrist: rSmooth.wrist, roll: rSmooth.roll, flick: rSmooth.flick, v: rSmooth.v};
 }
 function loop(now){
   raf = 0;
