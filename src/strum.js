@@ -19,16 +19,18 @@ export const STRUM_X = fretX(16.5);          // 弾く場所：ネックとボ�
 export const STRUM_AMP = 0.30;               // 振りの大きさ（ラジアン）
 
 export const STRUM_CFG = {
-  wristFlex: 32,                             // 手首は手のひら側へ軽く曲げるだけ（横には曲げない）
+  wristFlex: 8,                              // 手首は手のひら側へほんの少し曲げるだけ（手は前腕の延長に近く、ボディの面に沿う）
   palm: [0, -0.15, -1],                      // 手のひらはボディの方を向く（手の甲は客席側）
-  curl:  {1:[38,58,16], 2:[74,100,60], 3:[80,102,60], 4:[84,102,60]},  // 指の曲げ（付け根＝第3・第2・第1関節）。人差し指はかぎづめ
+  curl:  {1:[58,60,16], 2:[84,100,60], 3:[88,102,60], 4:[90,102,60]},  // 指の曲げ（付け根＝第3・第2・第1関節）。人差し指はかぎづめ
   splay: {1:6, 2:0, 3:-7, 4:-15},            // 指を軽く寄せる（度）
   pivotUp: 120,                              // 腕で振る時の中心：弦から客席側へ何mmか
   rollBias: -12,                             // 構えの時から、前腕を小指側へ少しひねっておく（度）
   armFollow: 0,                              // 弦の上の動きのうち、腕ごと動く割合（0：前腕は止める）
-  deviation: 18,                             // 手首を小指側へ倒す角度（度）。ダウンで爪が弦に30〜45°で当たるように決める
+  reach: 0.9,                                // 振りの幅の倍率（指先が4本の弦を少し越えるくらい）
+  armAlong: 0.95,                            // 見えている前腕を、手の向きと前腕の本当の向きのどちらに合わせるか（1＝前腕の向き）
+  deviation: 30,                             // 手首を小指側へ倒す角度（度）。ダウンで爪が弦に30〜45°で当たるように決める
   press: 1.3,                                // ダウンで1弦・2弦側を少し深く通る量（mm）
-  elbow: [0.84, -0.45, -0.45],               // 手首→ひじの向き：前腕はウクレレの尾側から、ボディの上の方をほぼ水平に横切って来る（ひじは体の横）
+  elbow: [0.92, -0.2, -0.34],                // 手首→ひじの向き：前腕はウクレレの尾側から、ボディの上の縁に沿ってほぼ水平に来る（ひじは体の横）
 };
 
 const R3 = (axis, a, v) => { const k = norm(axis), c = Math.cos(a), s = Math.sin(a);
@@ -111,7 +113,7 @@ export function rightHandPose(rig, st){
   // 回す軸：手首から指先へ向かう線と、弦をまたぐ向き（y）の両方に直交する軸
   const hv = sub(target, pivot);
   const ax = norm(cross(hv, [0,1,0])), rHit = vlen(sub(hv, mul(ax, dot(hv, ax))));
-  const reach = st.theta * (STRUM_CFG.pivotUp - 4) * 0.72;            // 弦の上で指先が動く幅（mm）。残りは前腕のひねりで
+  const reach = st.theta * (STRUM_CFG.pivotUp - 4) * STRUM_CFG.reach;  // 弦の上で指先が動く幅（mm）
   const follow = reach * STRUM_CFG.armFollow;                          // 腕ごと少しついてくる分
   const th = (reach - follow) / rHit;
   // 弦に当たる点：ダウンは爪の外側、アップは指の腹（動く向きでなめらかに切り替える）
@@ -150,7 +152,7 @@ export function rightHandPose(rig, st){
   // （手首で強く折ると、短い腕の皮膚がねじれてギザギザに見えるため）。少しだけ前腕の向きに寄せる
   // 前腕はあまり動かない（手首から先が主に動く）
   const dirArm = v => v;                                          // 前腕は動かさない（手首から先だけが回る）
-  const fa = norm(add(mul(dirArm(F), 0.8), mul(dirArm(fa0), 0.2)));
+  const fa = norm(add(mul(dirArm(F), 1 - STRUM_CFG.armAlong), mul(dirArm(fa0), STRUM_CFG.armAlong)));
   const Ur = dirArm(R3(F, rollA*0.8, U));                                // 前腕の回転（回内・回外）なので前腕もひねる
   out.push({name:'forearm', pos: Wp, fwd: fa, dorsal: sub(Ur, mul(fa, dot(Ur,fa)))});
   for(const j of J) out.push({name: j.name, pos: place(add(W, toWb(j.pos))), fwd: norm(dir(toWb(j.fwd))), dorsal: norm(dir(toWb(j.dorsal)))});
