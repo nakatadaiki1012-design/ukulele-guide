@@ -54,15 +54,51 @@ function chain2(L, th, p2, p3){
 
 /* 1本の指：第二関節の曲げ角を二分探索で決め、第一関節の連動比率をいくつか試して
    「指先が真上から当たる」「他の弦に触れない」「関節が無理な角度にならない」ものを選ぶ */
-function solveFinger(f, Lbone, K, T, H, kind){
+/* 待っている指：力を抜いた形（つけ根 約40°・第二関節 約50°）を基本に、
+   「弦に触れない高さ」「だいたい自分のフレット・弦の上」を保つように、曲げ角を少しだけ変える。
+   決まった点に指先を合わせないので、近すぎる点に合わせて「く」の字に縮こまることがない */
+function relaxedFinger(f, Lbone, K, T, H, lift, others=[]){
+  const R = RAD[f], c = COUPLE[f];
+  const L = [Lbone[0], Lbone[1], Lbone[2]+PAD_EXT];
+  const d = sub(T,K); let e = sub(d, mul(H.N, dot(d,H.N)));             // つけ根 → 待つ場所 の向き（手のひらの向きと直角な成分）
+  e = vlen(e) > 1e-6 ? norm(e) : norm(sub(H.F, mul(H.N, dot(H.F,H.N))));
+  const toW = ([u,v]) => add(K, add(mul(e,u), mul(H.N,v)));
+  let best = null;
+  for(let th=-36; th<=24; th+=6) for(let p2=25; p2<=85; p2+=6){
+    const pts = chain2(L, th*DEG, p2*DEG, c*p2*DEG).map(toW);
+    const pad = pts[3];
+    let cost = ((th+12)*(th+12) + (p2-55)*(p2-55))/900;                   // 楽な形（少しそらせてから、第二関節で曲げる）からの違い
+    const need = stringZ(pad[0]) + PAD_R + lift;                           // 指の腹の高さ（弦から lift mm）
+    cost += Math.pow(Math.max(0, need - pad[2]), 2)*0.6 + Math.pow(Math.max(0, pad[2] - need - 6), 2)*0.03;
+    cost += Math.pow((pad[0]-T[0])/12, 2)*0.8 + Math.pow((pad[1]-T[1])/14, 2)*0.5;
+    for(let s=0;s<3;s++) for(let t=0;t<=1.001;t+=0.25){                   // 弦に触れない
+      const P = lerp3(pts[s],pts[s+1],t), r = lerp(R[s],R[s+1],t);
+      if(Math.abs(P[1]) < halfW(P[0]) + r*0.5){ const cl = P[2]-r-(stringZ(P[0])+1.0); if(cl<0) cost += cl*cl*2; }
+    }
+    for(const o of others) cost += fingerHit(f, pts, o.f, o.pts)*2;   // 押さえている指にかぶさらない
+    if(!best || cost < best.cost) best = {cost, pts};
+  }
+  const out = padToTip(best.pts, Lbone[2]); out.pen = 0;
+  return out;
+}
+
+/* 1本の指：第二関節の曲げ角を二分探索で決め、第一関節の連動比率をいくつか試して
+   「指先が真上から当たる」「他の弦に触れない」「関節が無理な角度にならない」ものを選ぶ */
+function solveFinger(f, Lbone, K, T, H, kind, others=[]){
   const R = RAD[f];
   const L = [Lbone[0], Lbone[1], Lbone[2]+PAD_EXT];
-  const d = sub(T,K), b = dot(d,H.N);
-  let e = sub(d, mul(H.N,b)); const a = vlen(e); e = a>1e-6 ? mul(e,1/a) : H.F;
-  const tgt = Math.hypot(a,b), tAng = Math.atan2(b,a);
-  const toW = ([u,v]) => add(K, add(mul(e,u), mul(H.N,v)));
-  const cs = kind==='press' ? [0.4,0.5,0.6,0.7,0.8,0.9,1.0] : [COUPLE[f]];
+  // 指を曲げる面：ふつうは手のひらの向き(N)を含む面。ほかの指とぶつかる時は、つけ根→指先の線を軸に面を少しひねる
+  // （指を少し横に開いて／閉じて曲げる。第二関節が隣の指の上にかぶさらないように）（ギター・ハンドガイドと同じ）
+  const ax = norm(sub(T,K)), rots = kind==='press' && others.length ? [0,-12,12,-24,24,-36,36] : [0];
   let best = null;
+  for(const rot of rots){
+  const c0 = Math.cos(rot*DEG), s0 = Math.sin(rot*DEG);
+  const Nr = rot ? add(add(mul(H.N,c0), mul(cross(ax,H.N),s0)), mul(ax, dot(ax,H.N)*(1-c0))) : H.N;
+  const d = sub(T,K), b = dot(d,Nr);
+  let e = sub(d, mul(Nr,b)); const a = vlen(e); e = a>1e-6 ? mul(e,1/a) : H.F;
+  const tgt = Math.hypot(a,b), tAng = Math.atan2(b,a);
+  const toW = ([u,v]) => add(K, add(mul(e,u), mul(Nr,v)));
+  const cs = kind==='press' ? [0.4,0.5,0.6,0.7,0.8,0.9,1.0] : [COUPLE[f]];
   for(const c of cs){
     const lenAt = p=>{ const q=chain2(L,0,p,c*p)[3]; return Math.hypot(q[0],q[1]); };
     const maxP = 112*DEG; let p2;
@@ -90,10 +126,24 @@ function solveFinger(f, Lbone, K, T, H, kind){
       const P = lerp3(pts[s],pts[s+1],t), r = lerp(R[s],R[s+1],t);
       if(Math.abs(P[1]) < halfW(P[0]) + r*0.5){ const cl = P[2]-r-(stringZ(P[0])+0.6); if(cl<0) pen += -cl*1.5; }
     }
+    // 先に形を決めた（押さえている）指にかぶさらない。面をひねるほど少し不自然なので、少しだけコストを足す
+    if(rot) pen += Math.abs(rot)*0.03;
+    for(const o of others) pen += fingerHit(f, pts, o.f, o.pts);
     if(!best || pen<best.pen) best = {pen, pts};
+  }
   }
   const out = padToTip(best.pts, Lbone[2]); out.pen = best.pen;
   return out;
+}
+// 2本の指がどれくらい重なっているか（重なった分の2乗）。付け根どうしは、もともと軽く触れ合っているので見ない
+function fingerHit(f, A, g, B){
+  let h = 0;
+  for(let a=1;a<3;a++) for(let b=1;b<3;b++){
+    const d = segDist(A[a],A[a+1],B[b],B[b+1]);
+    const r = 0.84*((RAD[f][a]+RAD[f][a+1])/2 + (RAD[g][b]+RAD[g][b+1])/2) - 2.5;
+    if(d < r) h += (r-d)*(r-d)*0.5;
+  }
+  return h;
 }
 // 「指の腹の点」→ モデルの tip 関節の位置に戻す
 function padToTip(pts, l3){
@@ -147,7 +197,9 @@ function buildHand(chord, rig, prm, thumbStart){
     const list = byFret[fr].sort((a,b)=>a-b), n = list.length;
     // 指先の前後位置もシミュレーションで調整（フレットとフレットの間に収める）。
     // 同じフレットに何本か並ぶときは、指の順番どおり斜めに並べる（人差し指がいちばんナット寄り）
-    const hi = fretX(+fr) - 2.5, lo = fretX(+fr-1) + 1.5, gap = Math.min(8, (hi-lo)/Math.max(1,n-1));
+    // 離れた弦を押さえる時ほど大きくずらす（遠い弦へのびる指が、もう1本の指先の上を横切らないように）
+    const strs = list.map(f=>Math.min(...used[f].strings)), span = strs.length > 1 ? Math.max(...strs) - Math.min(...strs) : 0;
+    const hi = fretX(+fr) - 2.5, lo = fretX(+fr-1) + 1.5, gap = Math.min(span >= 3 ? 13 : 8, (hi-lo)/Math.max(1,n-1));
     const xs = list.map((f,i)=> fretX(+fr) - 4.5 - (n-1-i)*gap + (prm['dx'+f] || 0));
     for(let i=n-1;i>=0;i--){ xs[i] = Math.min(xs[i], i<n-1 ? xs[i+1]-gap : hi); }
     for(let i=0;i<n;i++){ xs[i] = Math.max(xs[i], i>0 ? xs[i-1]+gap : lo); }
@@ -170,7 +222,10 @@ function buildHand(chord, rig, prm, thumbStart){
   let cost = 0; const parts = {};
   const addc = (k,v) => { parts[k] = (parts[k]||0)+v; cost += v; };
   const fingers = {};
-  for(let f=1; f<=4; f++){
+  // 押さえる指から先に形を決め、浮かせて待つ指は、押さえている指をよけて置く（ギター・ハンドガイドと同じ）
+  const order = [1,2,3,4].sort((a,b)=>(used[a]||(barre&&a===1) ? 0 : 1) - (used[b]||(barre&&b===1) ? 0 : 1) || a-b);
+  const pressed = () => Object.entries(fingers).filter(([,v])=>v.mode!=='hover').map(([g,v])=>({f:+g, pts:v.pts}));
+  for(const f of order){
     const L = rig.lengths[f];
     let pts, mode, string = null, T;  // T = 指の腹の目標点
     if(barre && f===1){
@@ -179,17 +234,16 @@ function buildHand(chord, rig, prm, thumbStart){
       mode = 'press'; string = Math.min(...used[f].strings);
       const x = tipX[f];
       T = [x, strY(string,x)+1.0, FRET_TOP + 0.35 + PAD_R];
-      pts = solveFinger(f, L, K[f], T, H, 'press');
+      pts = solveFinger(f, L, K[f], T, H, 'press', pressed());
       addc('pen'+f, pts.pen);
       // 届かない／縮こまりすぎ：指先が目標からずれた分
       const pd = vlen(sub(add(pts[2], mul(norm(sub(pts[3],pts[2])), L[2]+PAD_EXT)), T));
       addc('reach'+f, pd*pd*0.5);
     } else {
-      mode = 'hover';   // 使わない指：軽く曲げて弦の少し上に浮かせる
+      mode = 'hover';   // 使わない指：力を抜いた形のまま、弦の少し上に浮かせる（押さえている指にかぶさらない）
       const x = K[f][0]+2;
       T = [x, f===4 ? 20 : 12, FRET_TOP + PAD_R + (f===4 ? 10 : 9)];
-      pts = solveFinger(f, L, K[f], T, H, 'hover');
-      cost += pts.pen*0.3;
+      pts = relaxedFinger(f, L, K[f], T, H, f===4 ? 7 : 5, pressed());
     }
     const axis = norm(cross(sub(pts[3],pts[0]), H.N));
     fingers[f] = {mode, pts, string, axis};
@@ -271,10 +325,32 @@ function optimizeHand(chord, rig){
   return localSearch(chord, rig, best.prm, pressing, [0.5, 0.25, 0.125]);
 }
 
+/* ---------- 計算ずみの手の形（表） ----------
+   手の形の計算（optimizeHand）は1つ0.3〜1秒かかり、その間は画面が止まる。
+   全コードの「手の向き・位置の数値（prm）」だけをあらかじめ計算して pose-table.js に入れておき、
+   ここから1回組み立てるだけにする（数ミリ秒）。表にないコードは、これまでどおりその場で計算する。
+   pose.js の手の形の決め方を変えた時は、表を作り直す（tools/make-pose-table.mjs）（ギター・ハンドガイドと同じしくみ） */
+const PRM_KEYS = ['pitch','yaw','roll','yK','zK','dx1','dx2','dx3','dx4'];
+let PRM_TABLE = null;
+export function setPoseTable(t){ PRM_TABLE = t; }
+function fromTable(chord, rig){
+  const a = PRM_TABLE && PRM_TABLE[chord.name]; if(!a) return null;
+  const prm = Object.fromEntries(PRM_KEYS.map((k,i)=>[k, a[i]]));
+  const hb = buildHand(chord, rig, prm); hb.prm = prm;
+  return hb;
+}
+// 表を作る時に使う：いま覚えている手の形の数値を書き出す
+export function dumpPoseTable(){
+  const out = {};
+  for(const [k, hb] of poseCache) if(hb && hb.prm) out[k] = PRM_KEYS.map(n=>Math.round(hb.prm[n]*1000)/1000);
+  return out;
+}
+export const clearPoseCache = () => poseCache.clear();
+
 export function computePose(chord, rig){
   const t0 = performance.now();
   let hb = poseCache.get(chord.name);
-  if(!hb){ hb = optimizeHand(chord, rig); poseCache.set(chord.name, hb); }
+  if(!hb){ hb = fromTable(chord, rig) || optimizeHand(chord, rig); poseCache.set(chord.name, hb); }
   const {H, W, K, M, fingers, tipX, th, toWd, barre} = hb;
   const thumb = th.pts.map(v=>toWorld(H, W, v));
 
