@@ -24,6 +24,7 @@ export const HAND_CFG = {
   yK: 36, zK: -12, yKb: 40, zKb: -10,             // 人差し指の付け根の位置
   arm: [0.45, 0.50, -0.74],                       // 手首→肘の向き
   tipTilt: 28,                                    // 指先は真上から何度くらい傾けて当てるか
+  palmGap: [14, 20, 27, 34], palmGapW: 0.6,        // 指の付け根（人差し指→小指）がネックの表面から離れていてほしい距離(mm)。小指側ほど大きく＝手のひらが斜めになって、ネックから離れる
   thumbY: -14, thumbPeek: 12, thumbPeekZ: -6,                     // 親指の腹の位置（ネック裏のやや1弦G寄り）と、先をネックの上の縁から何mmのぞかせるか
 };
 function handFrame(barre, prm){
@@ -268,6 +269,8 @@ function buildHand(chord, rig, prm, thumbStart){
   for(let f=1; f<=4; f++){ palmPts.push([K[f],9], [M[f],11], [mul(add(K[f],M[f]),0.5),12]); }
   palmPts.push([W,20], [toWorld(H, W, rig.rest[THUMB_JOINTS[0]]),13]);
   for(const [p,r] of palmPts){ const g = neckSD(p); if(g < r) cost += (r-g)*(r-g)*1.5; }
+  // 手のひら（指の付け根）をネックから離す：小指側ほど大きく。指をのばして、斜めから押さえる形になる
+  for(let f=1; f<=4; f++){ const g = neckSD(K[f]), want = HAND_CFG.palmGap[f-1]; if(g < want) cost += (want-g)*(want-g)*HAND_CFG.palmGapW; }
   // 手首の曲がりすぎ（前腕の向きとの角度）
   const bend = Math.acos(Math.max(-1, Math.min(1, dot(H.F, mul(norm(HAND_CFG.arm),-1)))))/DEG;
   if(bend > 30) cost += (bend-30)*(bend-30)*0.02;
