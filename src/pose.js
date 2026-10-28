@@ -25,6 +25,7 @@ export const HAND_CFG = {
   arm: [0.45, 0.50, -0.74],                       // 手首→肘の向き
   tipTilt: 28,                                    // 指先は真上から何度くらい傾けて当てるか
   barreRise: -10, barreRiseW: 0.02, barreEdge: 12,   // セーハ：人差し指の付け根の高さ（指板の面 z=0 から。大きいほど指板に近い）と、ネックのふちからの距離
+  headShift: 12,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
   barreReach: 0.6, barreReachW: 0.08,                // セーハ：付け根と腹の線の入口の距離を、骨の長さのこの割合以上にする
   barreTilt: 0.5,                                  // セーハで人差し指を弦に対して斜めに寝かせる度合い（0＝弦に垂直にまっすぐ、1＝弦に沿って寝かせる）
   palmGap: [0, 20, 32, 42], palmGapW: 0.6, indexNear: 10, indexNearW: 0.5,        // 指の付け根（人差し指→小指）がネックの表面から離れていてほしい距離(mm)。小指側ほど大きく＝手のひらが斜めになって、ネックから離れる
@@ -241,7 +242,7 @@ function buildHand(chord, rig, prm, thumbStart){
   let anc = 0, cnt = 0;
   for(const f in tipX){ anc += tipX[f] - kRest(+f)[0]; cnt++; }
   anc = cnt ? anc/cnt : fretX(1)-2;
-  anc = Math.max(4, anc);
+  anc = Math.max(4, anc - HAND_CFG.headShift);          // ネックのヘッド側（ナット寄り）を手のひらに置く：手全体をヘッド側へずらし、指をのばして届かせる
   // 手首の位置：人差し指の付け根が [anc, yK, zK] に来るように
   const kIdx = toWorld(H, [0,0,0], rig.rest[jointName(1,1)]);
   const W = sub([anc, prm.yK, prm.zK], kIdx);
