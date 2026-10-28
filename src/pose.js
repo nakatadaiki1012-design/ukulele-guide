@@ -25,7 +25,8 @@ export const HAND_CFG = {
   arm: [0.45, 0.50, -0.74],                       // 手首→肘の向き
   tipTilt: 28,                                    // 指先は真上から何度くらい傾けて当てるか
   barreRise: -10, barreRiseW: 0.02, barreEdge: 12,   // セーハ：人差し指の付け根の高さ（指板の面 z=0 から。大きいほど指板に近い）と、ネックのふちからの距離
-  headShift: 12,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
+  headShift: 24,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
+  barrePole: [50, -18],                             // セーハの第二関節の折れる向き（A側へ・上へ）。A側が大きいほど、指が弦に沿って寝る
   barreReach: 0.6, barreReachW: 0.08,                // セーハ：付け根と腹の線の入口の距離を、骨の長さのこの割合以上にする
   barreTilt: 0.5,                                  // セーハで人差し指を弦に対して斜めに寝かせる度合い（0＝弦に垂直にまっすぐ、1＝弦に沿って寝かせる）
   palmGap: [0, 20, 32, 42], palmGapW: 0.6, indexNear: 10, indexNearW: 0.5,        // 指の付け根（人差し指→小指）がネックの表面から離れていてほしい距離(mm)。小指側ほど大きく＝手のひらが斜めになって、ネックから離れる
@@ -202,7 +203,10 @@ function solveBarre(L, K, barre, H){
     // （第二関節を、K と D の中間から、指板の上へ「少し」押し上げた位置に置く。押し上げる量は余りの長さから決める）
     const slack = Math.max(0, total - reach);
     const lift = Math.min(slack*0.45, 24);
-    P = ik3(K, D, L[0], L[1], add(mul(add(K,D),0.5), add(mul(H.N,-30), [0, 0, 14 + lift])));
+    // 第二関節（P）は、指板の上へそびえ立たせず、A弦の外側・弦と同じ高さの所に置く（指の腹〜中ほどが弦に沿って寝る）。
+    // そのため折れ曲がりの向き（pole）は、指板の外（A側）へ。barrePole = [A側へ, 上へ]
+    const bp = HAND_CFG.barrePole;
+    P = ik3(K, D, L[0], L[1], add(mul(add(K,D),0.5), [0, bp[0] + lift*0.2, bp[1]]));
     // 折れすぎ（第二関節の曲がりが 105° 超）の時は、第二関節を D の方へ寄せて曲がりをゆるめる
     const a1 = norm(sub(P,K)), a2 = norm(sub(D,P)), bend = Math.acos(Math.max(-1, Math.min(1, dot(a1,a2))))/DEG;
     if(bend > 105){
@@ -229,7 +233,7 @@ function buildHand(chord, rig, prm, thumbStart){
     // 同じフレットに何本か並ぶときは、指の順番どおり斜めに並べる（人差し指がいちばんナット寄り）
     // 離れた弦を押さえる時ほど大きくずらす（遠い弦へのびる指が、もう1本の指先の上を横切らないように）
     const strs = list.map(f=>Math.min(...used[f].strings)), span = strs.length > 1 ? Math.max(...strs) - Math.min(...strs) : 0;
-    const hi = fretX(+fr) - 2.5, lo = fretX(+fr-1) + 1.5, gap = Math.min(span >= 3 ? 13 : 8, (hi-lo)/Math.max(1,n-1));
+    const hi = fretX(+fr) - 2.5, lo = fretX(+fr-1) + (+fr === 1 ? 6 : 1.5), gap = Math.min(span >= 3 ? 13 : 8, (hi-lo)/Math.max(1,n-1));
     const xs = list.map((f,i)=> fretX(+fr) - 4.5 - (n-1-i)*gap + (prm['dx'+f] || 0));
     for(let i=n-1;i>=0;i--){ xs[i] = Math.min(xs[i], i<n-1 ? xs[i+1]-gap : hi); }
     for(let i=0;i<n;i++){ xs[i] = Math.max(xs[i], i>0 ? xs[i-1]+gap : lo); }
