@@ -27,7 +27,8 @@ export const HAND_CFG = {
   barreRise: -10, barreRiseW: 0.02, barreEdge: 12,   // セーハ：人差し指の付け根の高さ（指板の面 z=0 から。大きいほど指板に近い）と、ネックのふちからの距離
   headShift: 24,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
   barrePole: [50, -18],                             // セーハの第二関節の折れる向き（A側へ・上へ）。A側が大きいほど、指が弦に沿って寝る
-  barreFoldFrom: 62, barreFoldW: 0.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
+  barreFollows: [0.5, 0.7, 0.85, 1],                    // セーハで手を人差し指に合わせる割合の候補（コードごとに、いちばん無理のないものを選ぶ）
+  barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
   barreStraight: 0.93, barreBack: 0.85,           // セーハ：人差し指をどれくらいまっすぐのばすか（1＝完全にまっすぐ）、手を指の後ろ（ボディ側）へ置く割合
   barreReach: 0.6, barreReachW: 0.08,                // セーハ：付け根と腹の線の入口の距離を、骨の長さのこの割合以上にする
   barreTilt: 0.5,                                  // セーハで人差し指を弦に対して斜めに寝かせる度合い（0＝弦に垂直にまっすぐ、1＝弦に沿って寝かせる）
@@ -388,7 +389,7 @@ function optimizeHand(chord, rig){
   const others = chord.barre && chord.fingers.some(f => f && f !== 1);
   if(!others) return optimizeHand1(chord, rig, 0);
   let best = null;
-  for(const fl of [0, 0.5, 0.85]){ const r = optimizeHand1(chord, rig, fl); if(!best || r.cost < best.cost) best = r; }
+  for(const fl of HAND_CFG.barreFollows){ const r = optimizeHand1(chord, rig, fl); if(!best || r.cost < best.cost) best = r; }
   return best;
 }
 function optimizeHand1(chord, rig, follow){

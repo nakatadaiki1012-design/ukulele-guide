@@ -322,6 +322,7 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
       scene.traverse(o=>{ if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate = true); } });
     }, get cams(){ return [camera.position.toArray(), camera2.position.toArray(), controls.target.toArray()]; },
     setSplit(on){ splitOn = on; if(!on){ controls.enabled = true; if(controls2) controls2.enabled = false; } },
+    setNear(n){ camera.near = n; camera.updateProjectionMatrix(); requestRender && requestRender(); },   // 検証用：奥行きの精度を変えて、チラつき（同じ面の奪い合い）を調べる
     debugCam(pos, look){ camera.position.set(...pos); controls.target.set(...look); controls.update(); },
     onChange(fn){ requestRender = fn; },
     get viewName(){ return viewName; }

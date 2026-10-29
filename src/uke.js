@@ -120,12 +120,13 @@ export function buildUkulele(){
   add(sideGeo, mahoganySide, m=>{ m.position.z = -5 - BODY_DEPTH + plate; });
   // バインディング（縁の白いライン）
   const bindIn = insetPath(outline, 1.8);
-  add(new THREE.ExtrudeGeometry(shapeOf(insetPath(outline,-0.6),[bindIn.slice().reverse()]), {depth:2.2, bevelEnabled:false}), binding, m=>{ m.position.z = -5 - 2.6; });
-  add(new THREE.ExtrudeGeometry(shapeOf(insetPath(outline,-0.6),[bindIn.slice().reverse()]), {depth:2.2, bevelEnabled:false}), binding, m=>{ m.position.z = -5 - BODY_DEPTH + 0.4; });
+  add(new THREE.ExtrudeGeometry(shapeOf(insetPath(outline,-1.0),[bindIn.slice().reverse()]), {depth:2.2, bevelEnabled:false}), binding, m=>{ m.position.z = -5 - 2.6; });   // 外側は板（輪郭+0.6）より0.4mm外へ出す（同じ面の奪い合い＝チラつきを防ぐ）
+  add(new THREE.ExtrudeGeometry(shapeOf(insetPath(outline,-1.0),[bindIn.slice().reverse()]), {depth:2.2, bevelEnabled:false}), binding, m=>{ m.position.z = -5 - BODY_DEPTH + 0.4; });
   // サウンドホールの奥（暗い）とロゼッタ（飾りの輪）
   add(new THREE.CircleGeometry(SH_R+1, 48), dark, m=>{ m.position.set(SH_X, 0, -40); m.castShadow = false; });
   [[SH_R+1.5, SH_R+2.6, '#1a0e07'], [SH_R+2.6, SH_R+5.2, '#d9c9a5'], [SH_R+5.2, SH_R+6.4, '#1a0e07'], [SH_R+6.4, SH_R+7.0, '#b58a5a']].forEach(([a,b,c])=>{
-    add(new THREE.RingGeometry(a, b, 72), new THREE.MeshStandardMaterial({color:c, roughness:0.4}), m=>{ m.position.set(SH_X, 0, -4.97); m.castShadow=false; });
+    const rm = new THREE.MeshStandardMaterial({color:c, roughness:0.4, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2});
+    add(new THREE.RingGeometry(a, b, 72), rm, m=>{ m.position.set(SH_X, 0, -4.9); m.castShadow=false; });
   });
 
   /* ブリッジ・サドル */
