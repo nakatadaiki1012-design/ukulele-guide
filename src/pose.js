@@ -27,6 +27,9 @@ export const HAND_CFG = {
   headShift: 24,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
   barreFollows: [0.5, 0.7, 0.85, 1],                    // セーハで手を人差し指に合わせる割合の候補（コードごとに、いちばん無理のないものを選ぶ）
   barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
+  barreCurl: 32, barreBehind: 6,                   // セーハ中、使わない指の指先を、付け根からどれだけ上（弦をまたぐ向き）／ボディ側に置くか（mm）
+  barreOver: 26,                                   // セーハの指先が、G側の端の弦より外へはみ出してよい長さ
+  barreSlantFrom: 8, barreSlantW: 0.8,             // セーハ：付け根と第二関節の前後（フレット方向）のずれ。これを超えた分にコスト（指をフレットと平行に）
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
   mcpBack: 22, mcpBackW: 0.2,                      // 指の付け根が手の甲側へ反ってよい角度(度)と、超えた時の重み
   barreStraight: 0.93, barreBack: 0.85,           // セーハ：人差し指をどれくらいまっすぐのばすか（1＝完全にまっすぐ）、手を指の後ろ（ボディ側）へ置く割合
@@ -198,7 +201,7 @@ function barreGeom(L, barre){
   const yG = strY(barre.from, x), yA = strY(barre.to, x);      // 押さえる範囲の端の弦（from＝G側、to＝A側）
   const ext = L[2] + PAD_EXT, lie = L[1] + ext;                // 弦の上に寝る長さ（第二関節→指の腹の先）
   const yP = yA + 4, span = Math.abs((yG - 3) - yP);
-  const ySpan = Math.min(span, lie*0.98);                      // 弦をまたぐ幅（指の長さを超えない）
+  const ySpan = Math.min(span + HAND_CFG.barreOver, lie*0.98);  // 弦をまたぐ幅（指の長さを超えない。指先はG側の端の弦から少しはみ出してよい＝フレットとほぼ平行に寝る）
   const dx = Math.sqrt(Math.max(0, lie*lie - ySpan*ySpan));    // 残りは、ボディ側へ寝た分（斜め）
   const T = [x - 1.5, yP - ySpan, zc];
   const P = [T[0] + dx, yP, zc + 0.8];
@@ -290,6 +293,8 @@ function buildHand(chord, rig, prm, thumbStart){
       if(barre && f>=2){
         const bx = fretX(barre.fret) - 6;
         T = [bx + 3 + (f-2)*5.5, 20 + (f-2)*7, FRET_TOP + PAD_R + 12 + (f-2)*2.5];
+        // 人差し指と同じ向き（弦をまたぐ向き）に、軽く曲げてそろえる（ナット側へ突き出さない）
+        T = [K[f][0] - HAND_CFG.barreBehind, K[f][1] - HAND_CFG.barreCurl, T[2]];
       }
       // 押さえる指が1本もない（開放弦だけの）コードは、指を弦のすぐ上に添える（宙に浮かせない）。
       // 押さえる指がある時は、その指の邪魔にならない高さに浮かせる
@@ -340,6 +345,7 @@ function buildHand(chord, rig, prm, thumbStart){
     const Ld = rig.lengths[1], g = barreGeom(Ld, barre);
     const d = vlen(sub(K[1], g.P)), want = Ld[0] * HAND_CFG.barreStraight;
     cost += (d - want)*(d - want)*HAND_CFG.barreDistW;
+    const sl = Math.max(0, Math.abs(K[1][0] - g.P[0]) - HAND_CFG.barreSlantFrom); addc('slant', sl*sl*HAND_CFG.barreSlantW);
   }
   // 人差し指の付け根は、ネックについてもよい（ここを支点に、手が小指側へ斜めに開く）。少し近い方が楽な形として好む
   { const g = neckSD(K[1]); if(g > HAND_CFG.indexNear) cost += (g-HAND_CFG.indexNear)*(g-HAND_CFG.indexNear)*HAND_CFG.indexNearW; }
@@ -358,7 +364,7 @@ function buildHand(chord, rig, prm, thumbStart){
 
 // 手の向き・位置を少しずつ変えて、いちばん無理のない持ち方をさがす
 const PRM_STEP = {pitch:8, yaw:8, roll:8, yK:5, zK:5, dx1:4, dx2:4, dx3:4, dx4:4};
-const PRM_LIM  = {pitch:[-45,45], yaw:[-35,35], roll:[-35,35], yK:[18,64], zK:[-42,2], dx1:[-24,4], dx2:[-24,4], dx3:[-24,4], dx4:[-24,4]};
+const PRM_LIM  = {pitch:[-45,45], yaw:[-35,35], roll:[-35,35], yK:[18,90], zK:[-42,2], dx1:[-24,4], dx2:[-24,4], dx3:[-24,4], dx4:[-24,4]};
 const poseCache = new Map();
 function localSearch(chord, rig, prm, pressing, scales){
   let best = buildHand(chord, rig, prm), thStart = best.th.ang;

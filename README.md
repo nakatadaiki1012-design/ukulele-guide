@@ -75,3 +75,5 @@ WebGL が使えるブラウザ（Chrome / Edge / Safari / Firefox の最近の�
 - `wrangler.jsonc` の設定で、デプロイ前に `npm run build` を実行し、`dist/index.html` だけを公開します（リポジトリ全体や `node_modules` は上げません）。Cloudflare 側のデプロイコマンドは `npx wrangler deploy` のままでOKです。
 
 - 指の付け根が手の甲側へ反りすぎない制限（MCP 反り制限）を追加。全168コードで「あり得ない反り」は 113 → 0。
+
+- セーハ：人差し指をフレットと平行にまっすぐ寝かせ、ほかの指は人差し指の後ろで軽く丸める。指が重なる箇所 36 → 4（全168コード）。
