@@ -73,3 +73,5 @@ WebGL が使えるブラウザ（Chrome / Edge / Safari / Firefox の最近の�
 
 ## 公開（Cloudflare）
 - `wrangler.jsonc` の設定で、デプロイ前に `npm run build` を実行し、`dist/index.html` だけを公開します（リポジトリ全体や `node_modules` は上げません）。Cloudflare 側のデプロイコマンドは `npx wrangler deploy` のままでOKです。
+
+- 指の付け根が手の甲側へ反りすぎない制限（MCP 反り制限）を追加。全168コードで「あり得ない反り」は 113 → 0。

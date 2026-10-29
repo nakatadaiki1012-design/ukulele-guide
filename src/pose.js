@@ -28,6 +28,7 @@ export const HAND_CFG = {
   barreFollows: [0.5, 0.7, 0.85, 1],                    // セーハで手を人差し指に合わせる割合の候補（コードごとに、いちばん無理のないものを選ぶ）
   barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
+  mcpBack: 22, mcpBackW: 0.2,                      // 指の付け根が手の甲側へ反ってよい角度(度)と、超えた時の重み
   barreStraight: 0.93, barreBack: 0.85,           // セーハ：人差し指をどれくらいまっすぐのばすか（1＝完全にまっすぐ）、手を指の後ろ（ボディ側）へ置く割合
   palmGap: [0, 20, 32, 42], palmGapW: 0.6, indexNear: 10, indexNearW: 0.5,        // 指の付け根（人差し指→小指）がネックの表面から離れていてほしい距離(mm)。小指側ほど大きく＝手のひらが斜めになって、ネックから離れる
   thumbY: -14, thumbPeek: 12, thumbPeekZ: -6,                     // 親指の腹の位置（ネック裏のやや1弦G寄り）と、先をネックの上の縁から何mmのぞかせるか
@@ -63,7 +64,7 @@ function chain2(L, th, p2, p3){
 /* 待っている指：力を抜いた形（つけ根 約40°・第二関節 約50°）を基本に、
    「弦に触れない高さ」「だいたい自分のフレット・弦の上」を保つように、曲げ角を少しだけ変える。
    決まった点に指先を合わせないので、近すぎる点に合わせて「く」の字に縮こまることがない */
-function relaxedFinger(f, Lbone, K, T, H, lift, others=[]){
+function relaxedFinger(f, Lbone, K, T, H, lift, others=[], dm=null){
   const R = RAD[f], c = COUPLE[f];
   const L = [Lbone[0], Lbone[1], Lbone[2]+PAD_EXT];
   const d = sub(T,K); let e = sub(d, mul(H.N, dot(d,H.N)));             // つけ根 → 待つ場所 の向き（手のひらの向きと直角な成分）
@@ -82,6 +83,7 @@ function relaxedFinger(f, Lbone, K, T, H, lift, others=[]){
       if(Math.abs(P[1]) < halfW(P[0]) + r*0.5){ const cl = P[2]-r-(stringZ(P[0])+1.0); if(cl<0) cost += cl*cl*2; }
     }
     for(const o of others) cost += fingerHit(f, pts, o.f, o.pts)*2;   // 押さえている指にかぶさらない
+    if(dm){ const bk = mcpBack(dm, pts); cost += bk*bk*HAND_CFG.mcpBackW; }
     if(!best || cost < best.cost) best = {cost, pts};
   }
   const out = padToTip(best.pts, Lbone[2]); out.pen = 0;
@@ -90,7 +92,7 @@ function relaxedFinger(f, Lbone, K, T, H, lift, others=[]){
 
 /* 1本の指：第二関節の曲げ角を二分探索で決め、第一関節の連動比率をいくつか試して
    「指先が真上から当たる」「他の弦に触れない」「関節が無理な角度にならない」ものを選ぶ */
-function solveFinger(f, Lbone, K, T, H, kind, others=[]){
+function solveFinger(f, Lbone, K, T, H, kind, others=[], dm=null){
   const R = RAD[f];
   const L = [Lbone[0], Lbone[1], Lbone[2]+PAD_EXT];
   // 指を曲げる面：ふつうは手のひらの向き(N)を含む面。ほかの指とぶつかる時は、つけ根→指先の線を軸に面を少しひねる
@@ -132,6 +134,7 @@ function solveFinger(f, Lbone, K, T, H, kind, others=[]){
       const P = lerp3(pts[s],pts[s+1],t), r = lerp(R[s],R[s+1],t);
       if(Math.abs(P[1]) < halfW(P[0]) + r*0.5){ const cl = P[2]-r-(stringZ(P[0])+0.6); if(cl<0) pen += -cl*1.5; }
     }
+    if(dm){ const bk = mcpBack(dm, pts); pen += bk*bk*HAND_CFG.mcpBackW*0.5; }
     // 先に形を決めた（押さえている）指にかぶさらない。面をひねるほど少し不自然なので、少しだけコストを足す
     if(rot) pen += Math.abs(rot)*0.03;
     for(const o of others) pen += fingerHit(f, pts, o.f, o.pts);
@@ -140,6 +143,13 @@ function solveFinger(f, Lbone, K, T, H, kind, others=[]){
   }
   const out = padToTip(best.pts, Lbone[2]); out.pen = best.pen;
   return out;
+}
+// 付け根の関節が手の甲側へ反っている角度（度。反っていなければ0）。dm＝手のひらの骨の向き、pts＝付け根・第二関節・第一関節・指先
+function mcpBack(dm, pts){
+  const d1 = norm(sub(pts[1], pts[0])), d2 = norm(sub(pts[2], pts[1]));
+  const angM = Math.acos(Math.max(-1, Math.min(1, dot(dm, d1))))/DEG, angP = Math.acos(Math.max(-1, Math.min(1, dot(d1, d2))))/DEG;
+  const sgn = angP > 12 ? (dot(cross(dm, d1), cross(d1, d2)) >= 0 ? 1 : -1) : 1;
+  return Math.max(0, -sgn*angM - HAND_CFG.mcpBack);
 }
 // 2本の指がどれくらい重なっているか（重なった分の2乗）。付け根どうしは、もともと軽く触れ合っているので見ない
 function fingerHit(f, A, g, B){
@@ -266,7 +276,7 @@ function buildHand(chord, rig, prm, thumbStart){
       mode = 'press'; string = Math.min(...used[f].strings);
       const x = tipX[f];
       T = [x, strY(string,x)+1.0, FRET_TOP + 0.35 + PAD_R];
-      pts = solveFinger(f, L, K[f], T, H, 'press', pressed());
+      pts = solveFinger(f, L, K[f], T, H, 'press', pressed(), norm(sub(K[f], M[f])));
       addc('pen'+f, pts.pen);
       // 届かない／縮こまりすぎ：指先が目標からずれた分
       const pd = vlen(sub(add(pts[2], mul(norm(sub(pts[3],pts[2])), L[2]+PAD_EXT)), T));
@@ -284,10 +294,20 @@ function buildHand(chord, rig, prm, thumbStart){
       // 押さえる指が1本もない（開放弦だけの）コードは、指を弦のすぐ上に添える（宙に浮かせない）。
       // 押さえる指がある時は、その指の邪魔にならない高さに浮かせる
       const idle = !barre && Object.keys(used).length === 0;
-      pts = relaxedFinger(f, L, K[f], T, H, idle ? 2 + (f-1)*0.8 : (f===4 ? 7 : 5), pressed());
+      pts = relaxedFinger(f, L, K[f], T, H, idle ? 2 + (f-1)*0.8 : (f===4 ? 7 : 5), pressed(), norm(sub(K[f], M[f])));
     }
     const axis = norm(cross(sub(pts[3],pts[0]), H.N));
     fingers[f] = {mode, pts, string, axis};
+  }
+  // 付け根の関節（手のひらの骨→指の骨）は、手の甲側へは少ししか反れない（人の指は約20〜30°まで）。
+  // 反りすぎた形（指が甲側へそっくり返る）は物理的にありえないので、コストをかける
+  for(let f=1; f<=4; f++){
+    const q = fingers[f].pts, dm = norm(sub(K[f], M[f])), d1 = norm(sub(q[1], q[0])), d2 = norm(sub(q[2], q[1]));
+    const angM = Math.acos(Math.max(-1, Math.min(1, dot(dm, d1))))/DEG, angP = Math.acos(Math.max(-1, Math.min(1, dot(d1, d2))))/DEG;
+    // 第二関節が曲がっている向きを「曲げる向き」として、付け根が逆向きに曲がっていれば反り（第二関節がほぼまっすぐな時は手のひらの向きで見る）
+    const flexSign = angP > 12 ? (dot(cross(dm, d1), cross(d1, d2)) >= 0 ? 1 : -1) : (dot(sub(d1, dm), H.N) >= 0 ? 1 : -1);
+    const back = -flexSign*angM - HAND_CFG.mcpBack;
+    if(back > 0) addc('mcpback'+f, back*back*HAND_CFG.mcpBackW);
   }
   // セーハの人差し指が「く」の字に折れない（第二関節の曲がりが大きいほど不自然）
   if(barre){ const q = fingers[1].pts, u = sub(q[0],q[1]), v = sub(q[2],q[1]);
