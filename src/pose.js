@@ -28,6 +28,7 @@ export const HAND_CFG = {
   barreFollows: [0.5, 0.7, 0.85, 1],                    // セーハで手を人差し指に合わせる割合の候補（コードごとに、いちばん無理のないものを選ぶ）
   barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
   barreCurl: 32, barreBehind: 6,                   // セーハ中、使わない指の指先を、付け根からどれだけ上（弦をまたぐ向き）／ボディ側に置くか（mm）
+  barreThumbX: 4,                                  // セーハ：親指の腹を、人差し指（セーハ）の真裏からボディ側へ何mmずらすか
   barreOver: 26,                                   // セーハの指先が、G側の端の弦より外へはみ出してよい長さ
   barreSlantFrom: 8, barreSlantW: 0.8,             // セーハ：付け根と第二関節の前後（フレット方向）のずれ。これを超えた分にコスト（指をフレットと平行に）
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
@@ -357,7 +358,7 @@ function buildHand(chord, rig, prm, thumbStart){
   rig.thumbModel ||= makeThumbModel(THUMB_JOINTS.map(n=>rig.rest[n]), THUMB_JOINTS.map(n=>rig.restBasis[n]), [0,-1,0]);
   const toWd = v => toWorld(H, [0,0,0], v);
   const th = solveThumb(rig.thumbModel, v=>toWorld(H, W, v), toWd,
-                        { xTarget: (K[1][0]+K[2][0])/2, yTarget: HAND_CFG.thumbY, peek: HAND_CFG.thumbPeek, peekZ: HAND_CFG.thumbPeekZ, start: thumbStart });
+                        { xTarget: barre ? fretX(barre.fret) - 6 + HAND_CFG.barreThumbX : (K[1][0]+K[2][0])/2, yTarget: HAND_CFG.thumbY, peek: HAND_CFG.thumbPeek, peekZ: HAND_CFG.thumbPeekZ, start: thumbStart });
   addc('thumb', th.cost);
   return {cost, parts, H, W, K, M, fingers, tipX, th, toWd, barre};
 }
