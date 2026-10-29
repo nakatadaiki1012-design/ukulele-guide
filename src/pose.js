@@ -24,14 +24,11 @@ export const HAND_CFG = {
   yK: 36, zK: -12, yKb: 40, zKb: -10,             // 人差し指の付け根の位置
   arm: [0.45, 0.50, -0.74],                       // 手首→肘の向き
   tipTilt: 28,                                    // 指先は真上から何度くらい傾けて当てるか
-  barreRise: -10, barreRiseW: 0.02, barreEdge: 12,   // セーハ：人差し指の付け根の高さ（指板の面 z=0 から。大きいほど指板に近い）と、ネックのふちからの距離
   headShift: 24,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
-  barrePole: [50, -18],                             // セーハの第二関節の折れる向き（A側へ・上へ）。A側が大きいほど、指が弦に沿って寝る
   barreFollows: [0.5, 0.7, 0.85, 1],                    // セーハで手を人差し指に合わせる割合の候補（コードごとに、いちばん無理のないものを選ぶ）
   barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
+  barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
   barreStraight: 0.93, barreBack: 0.85,           // セーハ：人差し指をどれくらいまっすぐのばすか（1＝完全にまっすぐ）、手を指の後ろ（ボディ側）へ置く割合
-  barreReach: 0.6, barreReachW: 0.08,                // セーハ：付け根と腹の線の入口の距離を、骨の長さのこの割合以上にする
-  barreTilt: 0.5,                                  // セーハで人差し指を弦に対して斜めに寝かせる度合い（0＝弦に垂直にまっすぐ、1＝弦に沿って寝かせる）
   palmGap: [0, 20, 32, 42], palmGapW: 0.6, indexNear: 10, indexNearW: 0.5,        // 指の付け根（人差し指→小指）がネックの表面から離れていてほしい距離(mm)。小指側ほど大きく＝手のひらが斜めになって、ネックから離れる
   thumbY: -14, thumbPeek: 12, thumbPeekZ: -6,                     // 親指の腹の位置（ネック裏のやや1弦G寄り）と、先をネックの上の縁から何mmのぞかせるか
 };
@@ -180,44 +177,30 @@ function ik3(A, C, l1, l2, pole){
   return add(A, add(mul(ax,l1*ca), mul(perp,l1*sa)));
 }
 
-// セーハ：人差し指を弦に対して斜めに寝かせて、指の腹と第一関節の側面で何本もまとめて押さえる。
-// 付け根（K）は1弦A側のふちの外にあり、そこから「斜めに」指がのびて、G側の端の弦の少し先まで届く。
-// 弦に垂直にまっすぐ立てたり、途中で折り返したりすると、1本の指で全部の弦を押さえているようには見えない。
-// 指の腹の線（D→T）はフレットの上で弦をまたぐ向きから tilt だけ寝かせる（0＝弦に垂直、1＝弦と平行）
-function solveBarre(L, K, barre, H){
+// セーハ：人差し指の「腹の線」を、押さえる弦の全部（G側の端〜A側の端）にまたがらせて、弦の面に沿って寝かせる。
+//   ・第二関節（P）を、A側の端の弦のすぐ外側（ネックの縁）に、弦と同じ高さで置く
+//   ・そこから、第二〜第一関節と指の腹（D→T）が、G側の端の弦までまっすぐ、斜めに（ボディ側から先端へ）並ぶ
+//   ・付け根（K）は、ネックの縁を回り込んだ後ろ側にある（付け根→第二関節の骨が、指板の縁を回り込む）
+// 戻り値：第二関節 P、第一関節 D、指の腹の先端 T（長さは指の骨の実寸）
+function barreGeom(L, barre){
   const x = fretX(barre.fret) - 6;
   const zc = FRET_TOP + 7.2;                                  // 指の中心の高さ（指の腹で弦を押し下げる）
   const yG = strY(barre.from, x), yA = strY(barre.to, x);      // 押さえる範囲の端の弦（from＝G側、to＝A側）
-  const tilt = Math.min(1, Math.max(0, HAND_CFG.barreTilt));
-  const pad = L[2] + PAD_EXT;                                  // 指の腹の線の長さ
-  // 腹の線：G側の端（先端 T）から、A側へ向かう
-  const T = [x - 1.5, yG - 3, zc];
-  const wide = Math.abs(yA - yG) + 6;                          // 弦をまたぐ幅
-  const along = Math.min(pad, wide / Math.max(0.2, 1 - tilt*0.6));
-  const dy = Math.min(wide, along*(1 - tilt*0.7)), dx = Math.sqrt(Math.max(0, along*along - dy*dy)) * 0.55 * tilt;
-  const D = [T[0] + dx*0.5 + 0.7, T[1] + dy*0.9, zc + 0.4];
-  // 第二関節：付け根（K）から腹の線の入口（D）まで、骨（L[0]＋L[1]）が「く」の字に折れすぎずに届く位置。
-  // 付け根が近すぎる（骨が余る）時は、余った分だけ、第二関節を指板の面に沿って（弦の外側へ）はらんで逃がす
-  const total = L[0] + L[1], reach = vlen(sub(D, K));
-  let P;
-  if(barre.to-barre.from+1 >= 3 && reach > total*0.8) P = [(K[0]+D[0])/2 + 2, (K[1]+D[1])/2, zc + 1.0 + Math.max(0, (K[2]-zc)*0.05)];
-  else {
-    // 骨が余る時：付け根→第二関節→D の折れ曲がりを、曲げ角が 100° を超えない範囲に収める
-    // （第二関節を、K と D の中間から、指板の上へ「少し」押し上げた位置に置く。押し上げる量は余りの長さから決める）
-    const slack = Math.max(0, total - reach);
-    const lift = Math.min(slack*0.45, 24);
-    // 第二関節（P）は、指板の上へそびえ立たせず、A弦の外側・弦と同じ高さの所に置く（指の腹〜中ほどが弦に沿って寝る）。
-    // そのため折れ曲がりの向き（pole）は、指板の外（A側）へ。barrePole = [A側へ, 上へ]
-    const bp = HAND_CFG.barrePole;
-    P = ik3(K, D, L[0], L[1], add(mul(add(K,D),0.5), [0, bp[0] + lift*0.2, bp[1]]));
-    // 折れすぎ（第二関節の曲がりが 105° 超）の時は、第二関節を D の方へ寄せて曲がりをゆるめる
-    const a1 = norm(sub(P,K)), a2 = norm(sub(D,P)), bend = Math.acos(Math.max(-1, Math.min(1, dot(a1,a2))))/DEG;
-    if(bend > 105){
-      const t = Math.min(0.6, (bend-105)/70);
-      P = add(mul(P, 1-t), mul(add(mul(K, 0.35), mul(D, 0.65)), t));
-    }
-  }
-  return padToTip([K, P, D, T], L[2]);
+  const ext = L[2] + PAD_EXT, lie = L[1] + ext;                // 弦の上に寝る長さ（第二関節→指の腹の先）
+  const yP = yA + 4, span = Math.abs((yG - 3) - yP);
+  const ySpan = Math.min(span, lie*0.98);                      // 弦をまたぐ幅（指の長さを超えない）
+  const dx = Math.sqrt(Math.max(0, lie*lie - ySpan*ySpan));    // 残りは、ボディ側へ寝た分（斜め）
+  const T = [x - 1.5, yP - ySpan, zc];
+  const P = [T[0] + dx, yP, zc + 0.8];
+  const u = norm(sub(T, P));
+  const D = add(P, mul(u, L[1]));
+  return {P, D, T: add(D, mul(u, ext)), x, zc};
+}
+function solveBarre(L, K, barre, H){
+  const g = barreGeom(L, barre);
+  // 指は常に弦の上に置く（弦から浮かせない）。付け根（K）〜第二関節の距離が骨の長さからずれる分は、
+  // 手の位置を決める時の条件（barreDistW）で小さくする。ずれが残っても、骨を少し縮め／のばして見せる
+  return padToTip([K, g.P, g.D, g.T], L[2]);
 }
 
 /* 手全体の形を作って「どれくらい無理があるか（コスト）」を返す */
@@ -257,12 +240,12 @@ function buildHand(chord, rig, prm, thumbStart){
   const barreOnly = !!barre && Object.keys(used).every(f => +f === 1);
   const follow = barreOnly ? 1 : (barre ? (prm.follow ?? 0) : 0);          // 手を指に合わせる割合。ほかの指も押さえるセーハは、コードごとに探して決める（prm.follow）
   if(follow > 0){
-    // セーハ：手は「指についていく」。人差し指をほぼまっすぐのばした時の付け根の前後位置に、手（手のひら）を置く。
-    // 指の腹の先（G側の端）から、付け根までの距離が「指の長さ×barreStraight」になるように、付け根の前後位置(x)を決める
-    const Ld = rig.lengths[1], bx = fretX(barre.fret) - 6, T0 = [bx - 1.5, strY(barre.from, bx) - 3, FRET_TOP + 7.2];
-    const len = (Ld[0] + Ld[1]) * HAND_CFG.barreStraight + (Ld[2] + PAD_EXT) * 0.9;
-    const dy = prm.yK - T0[1], dz = prm.zK - T0[2], dx = Math.sqrt(Math.max(0, len*len - dy*dy - dz*dz));
-    kTarget = [anc + (T0[0] + dx*HAND_CFG.barreBack - anc)*follow, prm.yK, prm.zK];
+    // セーハ：手は「指についていく」。第二関節（P）から、付け根（K）までの骨の長さ（×barreStraight）の所に、
+    // 手（手のひら）を置く。K は、ネックの縁を回り込んだ後ろ側（zK）で、前後（x）は骨の長さで決まる
+    const Ld = rig.lengths[1], g = barreGeom(Ld, barre);
+    const len = Ld[0] * HAND_CFG.barreStraight;
+    const dy = prm.yK - g.P[1], dz = prm.zK - g.P[2], dx = Math.sqrt(Math.max(0, len*len - dy*dy - dz*dz));
+    kTarget = [anc + (g.P[0] + dx*HAND_CFG.barreBack - anc)*follow, prm.yK, prm.zK];
   }
   const W = sub(kTarget, kIdx);
   const K = {}, M = {};
@@ -332,19 +315,11 @@ function buildHand(chord, rig, prm, thumbStart){
   for(const [p,r] of palmPts){ const g = neckSD(p); if(g < r) cost += (r-g)*(r-g)*1.5; }
   // 手のひら（指の付け根）をネックから離す：小指側ほど大きく。指をのばして、斜めから押さえる形になる
   for(let f=1; f<=4; f++){ const g = neckSD(K[f]), want = HAND_CFG.palmGap[f-1]; if(g < want) cost += (want-g)*(want-g)*HAND_CFG.palmGapW; }
-  // セーハ：付け根（K）から腹の線の入口までの距離が、人差し指の骨（付け根側の2本ぶん）に対して近すぎると、
-  // 余った骨が「く」の字に折れて第二関節が指板の上に飛び出す。骨の長さの6割以上は離しておく
+  // セーハ：付け根（K）から第二関節（P）までの距離が、骨の長さにちょうど合うように（遠いと指が届かず、近いと余って折れる）
   if(barre){
-    const Ld = rig.lengths[1], bx = fretX(barre.fret) - 6, gy = strY(barre.from, bx);
-    const near = vlen(sub(K[1], [bx, gy, FRET_TOP + 7]));
-    const want = (Ld[0] + Ld[1]) * HAND_CFG.barreReach;
-    if(near < want) cost += (want-near)*(want-near)*HAND_CFG.barreReachW;
-  }
-  // セーハ：人差し指を指板の面に近い位置から寝かせて当てる（付け根が低いと、指が弦の上へ「立ち上がる」形になる）
-  if(barre){
-    const k = K[1], hw = halfW(k[0]);
-    const dz = Math.max(0, HAND_CFG.barreRise - (k[2] - 0)), over = Math.max(0, Math.abs(k[1]) - hw - HAND_CFG.barreEdge);
-    cost += (dz*dz*HAND_CFG.barreRiseW) + over*over*0.15;
+    const Ld = rig.lengths[1], g = barreGeom(Ld, barre);
+    const d = vlen(sub(K[1], g.P)), want = Ld[0] * HAND_CFG.barreStraight;
+    cost += (d - want)*(d - want)*HAND_CFG.barreDistW;
   }
   // 人差し指の付け根は、ネックについてもよい（ここを支点に、手が小指側へ斜めに開く）。少し近い方が楽な形として好む
   { const g = neckSD(K[1]); if(g > HAND_CFG.indexNear) cost += (g-HAND_CFG.indexNear)*(g-HAND_CFG.indexNear)*HAND_CFG.indexNearW; }
