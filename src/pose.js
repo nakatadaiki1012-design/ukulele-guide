@@ -27,6 +27,8 @@ export const HAND_CFG = {
   barreRise: -10, barreRiseW: 0.02, barreEdge: 12,   // セーハ：人差し指の付け根の高さ（指板の面 z=0 から。大きいほど指板に近い）と、ネックのふちからの距離
   headShift: 24,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
   barrePole: [50, -18],                             // セーハの第二関節の折れる向き（A側へ・上へ）。A側が大きいほど、指が弦に沿って寝る
+  barreFoldFrom: 62, barreFoldW: 0.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
+  barreStraight: 0.93, barreBack: 0.85,           // セーハ：人差し指をどれくらいまっすぐのばすか（1＝完全にまっすぐ）、手を指の後ろ（ボディ側）へ置く割合
   barreReach: 0.6, barreReachW: 0.08,                // セーハ：付け根と腹の線の入口の距離を、骨の長さのこの割合以上にする
   barreTilt: 0.5,                                  // セーハで人差し指を弦に対して斜めに寝かせる度合い（0＝弦に垂直にまっすぐ、1＝弦に沿って寝かせる）
   palmGap: [0, 20, 32, 42], palmGapW: 0.6, indexNear: 10, indexNearW: 0.5,        // 指の付け根（人差し指→小指）がネックの表面から離れていてほしい距離(mm)。小指側ほど大きく＝手のひらが斜めになって、ネックから離れる
@@ -249,7 +251,19 @@ function buildHand(chord, rig, prm, thumbStart){
   anc = Math.max(4, anc - HAND_CFG.headShift);          // ネックのヘッド側（ナット寄り）を手のひらに置く：手全体をヘッド側へずらし、指をのばして届かせる
   // 手首の位置：人差し指の付け根が [anc, yK, zK] に来るように
   const kIdx = toWorld(H, [0,0,0], rig.rest[jointName(1,1)]);
-  const W = sub([anc, prm.yK, prm.zK], kIdx);
+  let kTarget = [anc, prm.yK, prm.zK];
+  // 人差し指しか使わないセーハ（Cm・Bm7・D6 など）だけ、手を指に合わせる。ほかの指も押さえるセーハは、ほかの指が届くように今までの置き方
+  const barreOnly = !!barre && Object.keys(used).every(f => +f === 1);
+  const follow = barreOnly ? 1 : (barre ? (prm.follow ?? 0) : 0);          // 手を指に合わせる割合。ほかの指も押さえるセーハは、コードごとに探して決める（prm.follow）
+  if(follow > 0){
+    // セーハ：手は「指についていく」。人差し指をほぼまっすぐのばした時の付け根の前後位置に、手（手のひら）を置く。
+    // 指の腹の先（G側の端）から、付け根までの距離が「指の長さ×barreStraight」になるように、付け根の前後位置(x)を決める
+    const Ld = rig.lengths[1], bx = fretX(barre.fret) - 6, T0 = [bx - 1.5, strY(barre.from, bx) - 3, FRET_TOP + 7.2];
+    const len = (Ld[0] + Ld[1]) * HAND_CFG.barreStraight + (Ld[2] + PAD_EXT) * 0.9;
+    const dy = prm.yK - T0[1], dz = prm.zK - T0[2], dx = Math.sqrt(Math.max(0, len*len - dy*dy - dz*dz));
+    kTarget = [anc + (T0[0] + dx*HAND_CFG.barreBack - anc)*follow, prm.yK, prm.zK];
+  }
+  const W = sub(kTarget, kIdx);
   const K = {}, M = {};
   for(let f=1; f<=4; f++){ K[f] = toWorld(H, W, rig.rest[jointName(f,1)]); M[f] = toWorld(H, W, rig.rest[jointName(f,0)]); }
 
@@ -291,6 +305,10 @@ function buildHand(chord, rig, prm, thumbStart){
     const axis = norm(cross(sub(pts[3],pts[0]), H.N));
     fingers[f] = {mode, pts, string, axis};
   }
+  // セーハの人差し指が「く」の字に折れない（第二関節の曲がりが大きいほど不自然）
+  if(barre){ const q = fingers[1].pts, u = sub(q[0],q[1]), v = sub(q[2],q[1]);
+    const mid = 180 - Math.acos(Math.max(-1, Math.min(1, dot(u,v)/(vlen(u)*vlen(v)||1))))/DEG;
+    addc('fold', Math.max(0, mid - HAND_CFG.barreFoldFrom) * HAND_CFG.barreFoldW); }
   // 指どうしがぶつからない（重なると指がくっついて見える）
   for(let f=1; f<=4; f++) for(let g=f+1; g<=4; g++){
     const A = fingers[f].pts, B = fingers[g].pts;
@@ -366,8 +384,16 @@ function localSearch(chord, rig, prm, pressing, scales){
   return best;
 }
 function optimizeHand(chord, rig){
+  // ほかの指も押さえるセーハは、手を人差し指に合わせる割合を3通り試して、いちばん無理のない（折れず・重ならず・届く）ものを選ぶ
+  const others = chord.barre && chord.fingers.some(f => f && f !== 1);
+  if(!others) return optimizeHand1(chord, rig, 0);
+  let best = null;
+  for(const fl of [0, 0.5, 0.85]){ const r = optimizeHand1(chord, rig, fl); if(!best || r.cost < best.cost) best = r; }
+  return best;
+}
+function optimizeHand1(chord, rig, follow){
   const fullBarre = !!chord.barre && (chord.barre.to-chord.barre.from+1) >= 3;
-  const base = {pitch:0, yaw:0, roll:0, yK: fullBarre ? HAND_CFG.yKb : HAND_CFG.yK, zK: fullBarre ? HAND_CFG.zKb : HAND_CFG.zK, dx1:0, dx2:0, dx3:0, dx4:0};
+  const base = {pitch:0, yaw:0, roll:0, yK: fullBarre ? HAND_CFG.yKb : HAND_CFG.yK, zK: fullBarre ? HAND_CFG.zKb : HAND_CFG.zK, dx1:0, dx2:0, dx3:0, dx4:0, follow};
   const pressing = new Set(chord.fingers.filter(Boolean));
   // いくつかの出発点から探して、いちばん無理のない形を選ぶ（行き止まりにはまらないように）
   const starts = [
@@ -391,12 +417,12 @@ function optimizeHand(chord, rig){
    全コードの「手の向き・位置の数値（prm）」だけをあらかじめ計算して pose-table.js に入れておき、
    ここから1回組み立てるだけにする（数ミリ秒）。表にないコードは、これまでどおりその場で計算する。
    pose.js の手の形の決め方を変えた時は、表を作り直す（tools/make-pose-table.mjs）（ギター・ハンドガイドと同じしくみ） */
-const PRM_KEYS = ['pitch','yaw','roll','yK','zK','dx1','dx2','dx3','dx4'];
+const PRM_KEYS = ['pitch','yaw','roll','yK','zK','dx1','dx2','dx3','dx4','follow'];
 let PRM_TABLE = null;
 export function setPoseTable(t){ PRM_TABLE = t; }
 function fromTable(chord, rig){
   const a = PRM_TABLE && PRM_TABLE[chord.name]; if(!a) return null;
-  const prm = Object.fromEntries(PRM_KEYS.map((k,i)=>[k, a[i]]));
+  const prm = Object.fromEntries(PRM_KEYS.map((k,i)=>[k, a[i] ?? 0]));
   const hb = buildHand(chord, rig, prm); hb.prm = prm;
   return hb;
 }
