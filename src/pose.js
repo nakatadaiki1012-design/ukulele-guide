@@ -29,6 +29,7 @@ export const HAND_CFG = {
   barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
   barreCurl: 32, barreBehind: 6,                   // セーハ中、使わない指の指先を、付け根からどれだけ上（弦をまたぐ向き）／ボディ側に置くか（mm）
   barreThumbX: 4,                                  // セーハ：親指の腹を、人差し指（セーハ）の真裏からボディ側へ何mmずらすか
+  barreP: 2,                                       // セーハ：第二関節の位置（フレットの手前6mmからの前後。大きいほどフレット寄り）
   barreOver: 26,                                   // セーハの指先が、G側の端の弦より外へはみ出してよい長さ
   barreSlantFrom: 8, barreSlantW: 0.8,             // セーハ：付け根と第二関節の前後（フレット方向）のずれ。これを超えた分にコスト（指をフレットと平行に）
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
@@ -204,8 +205,9 @@ function barreGeom(L, barre){
   const yP = yA + 4, span = Math.abs((yG - 3) - yP);
   const ySpan = Math.min(span + HAND_CFG.barreOver, lie*0.98);  // 弦をまたぐ幅（指の長さを超えない。指先はG側の端の弦から少しはみ出してよい＝フレットとほぼ平行に寝る）
   const dx = Math.sqrt(Math.max(0, lie*lie - ySpan*ySpan));    // 残りは、ボディ側へ寝た分（斜め）
-  const T = [x - 1.5, yP - ySpan, zc];
-  const P = [T[0] + dx, yP, zc + 0.8];
+  // 第二関節（P）をフレットのすぐ手前に置き、指先（T）はさらにヘッド側へ：指の腹が、フレットをまたがず手前（ヘッド側）に収まる
+  const P = [x + HAND_CFG.barreP, yP, zc + 0.8];
+  const T = [P[0] - dx, yP - ySpan, zc];
   const u = norm(sub(T, P));
   const D = add(P, mul(u, L[1]));
   return {P, D, T: add(D, mul(u, ext)), x, zc};
