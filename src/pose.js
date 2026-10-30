@@ -28,8 +28,9 @@ export const HAND_CFG = {
   barreFollows: [0.5, 0.7, 0.85, 1],                    // セーハで手を人差し指に合わせる割合の候補（コードごとに、いちばん無理のないものを選ぶ）
   barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
   barreCurl: 32, barreBehind: 6,                   // セーハ中、使わない指の指先を、付け根からどれだけ上（弦をまたぐ向き）／ボディ側に置くか（mm）
-  barreThumbX: 4,                                  // セーハ：親指の腹を、人差し指（セーハ）の真裏からボディ側へ何mmずらすか
+  barreThumbX: -6,                                 // セーハ：親指の腹を、人差し指（セーハ）の真裏からボディ側へ何mmずらすか
   barreP: 2,                                       // セーハ：第二関節の位置（フレットの手前6mmからの前後。大きいほどフレット寄り）
+  barreRoll: 45,                                   // セーハ：人差し指を親指側の縁で押さえるようにねじる角度
   barreOver: 26,                                   // セーハの指先が、G側の端の弦より外へはみ出してよい長さ
   barreSlantFrom: 0, barreSlantW: 1.5,             // セーハ：付け根と第二関節の前後（フレット方向）のずれ。これを超えた分にコスト（指をフレットと平行に）
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
@@ -456,7 +457,14 @@ export function computePose(chord, rig){
     const {pts, axis} = fingers[f];
     for(let i=0;i<4;i++){
       const fwd = norm(sub(pts[Math.min(i+1,3)], pts[Math.min(i,2)]));
-      J(jointName(f,i+1), pts[i], fwd, cross(fwd, axis), f, i+1);
+      let dors = cross(fwd, axis);
+      // セーハ：人差し指は腹ではなく、親指側の縁（指のわき）で弦を押さえる＝指をねじって、腹をヘッド側へ向ける（背はボディ側へ）
+      if(barre && f===1 && i >= 1){
+        const nd = norm(dors), bx = norm(sub([1,0,0], mul(fwd, fwd[0])));
+        const a = HAND_CFG.barreRoll*DEG;
+        dors = add(mul(nd, Math.cos(a)), mul(bx, Math.sin(a)));
+      }
+      J(jointName(f,i+1), pts[i], fwd, dors, f, i+1);
     }
   }
   for(let i=0;i<4;i++){
