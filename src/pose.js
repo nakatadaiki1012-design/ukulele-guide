@@ -32,7 +32,8 @@ export const HAND_CFG = {
   barreP: 2,                                       // セーハ：第二関節の位置（フレットの手前6mmからの前後。大きいほどフレット寄り）
   barreRoll: 45,                                   // セーハ：人差し指を親指側の縁で押さえるようにねじる角度
   barreFist: true, fistMcp: 45, fistPip: 90,       // セーハ中、使わない指を手のひらの方へ軽くにぎる（付け根・第二関節の曲げ角の目安）
-  barreOver: 26,                                   // セーハの指先が、G側の端の弦より外へはみ出してよい長さ
+  barreWrap: 0.5,                                  // 第二関節がネックの縁の外へ出た分、後ろへ回り込ませる割合
+  barreOver: 8,                                    // セーハの指先が、G側の端の弦より外へはみ出してよい長さ
   barreSlantFrom: 0, barreSlantW: 1.5,             // セーハ：付け根と第二関節の前後（フレット方向）のずれ。これを超えた分にコスト（指をフレットと平行に）
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
   mcpBack: 22, mcpBackW: 0.2,                      // 指の付け根が手の甲側へ反ってよい角度(度)と、超えた時の重み
@@ -213,11 +214,14 @@ function barreGeom(L, barre){
   const zc = FRET_TOP + 7.2;                                  // 指の中心の高さ（指の腹で弦を押し下げる）
   const yG = strY(barre.from, x), yA = strY(barre.to, x);      // 押さえる範囲の端の弦（from＝G側、to＝A側）
   const ext = L[2] + PAD_EXT, lie = L[1] + ext;                // 弦の上に寝る長さ（第二関節→指の腹の先）
-  const yP = yA + 4, span = Math.abs((yG - 3) - yP);
+  // 指が押さえる幅より長い時（2〜3本だけのセーハ）は、指先を大きくはみ出させず、第二関節をネックの縁の外（A側）へ出して、
+  // 指を下から差し込む（手を下げる）。縁の外では、第二関節は縁を回り込むように少し後ろへ
+  const span0 = Math.abs((yG - 3) - (yA + 4)), extra = Math.max(0, lie*0.98 - span0 - HAND_CFG.barreOver);
+  const yP = yA + 4 + extra, span = Math.abs((yG - 3) - yP);
   const ySpan = Math.min(span + HAND_CFG.barreOver, lie*0.98);  // 弦をまたぐ幅（指の長さを超えない。指先はG側の端の弦から少しはみ出してよい＝フレットとほぼ平行に寝る）
   const dx = Math.sqrt(Math.max(0, lie*lie - ySpan*ySpan));    // 残りは、ボディ側へ寝た分（斜め）
   // 第二関節（P）をフレットのすぐ手前に置き、指先（T）はさらにヘッド側へ：指の腹が、フレットをまたがず手前（ヘッド側）に収まる
-  const P = [x + HAND_CFG.barreP, yP, zc + 0.8];
+  const P = [x + HAND_CFG.barreP, yP, zc + 0.8 - extra*HAND_CFG.barreWrap];
   const T = [P[0] - dx, yP - ySpan, zc];
   const u = norm(sub(T, P));
   const D = add(P, mul(u, L[1]));
@@ -313,7 +317,7 @@ function buildHand(chord, rig, prm, thumbStart){
       // 押さえる指が1本もない（開放弦だけの）コードは、指を弦のすぐ上に添える（宙に浮かせない）。
       // 押さえる指がある時は、その指の邪魔にならない高さに浮かせる
       const idle = !barre && Object.keys(used).length === 0;
-      pts = relaxedFinger(f, L, K[f], T, H, idle ? 2 + (f-1)*0.8 : (f===4 ? 7 : 5), pressed(), norm(sub(K[f], M[f])), !!barre && HAND_CFG.barreFist);
+      pts = relaxedFinger(f, L, K[f], T, H, idle ? 2 + (f-1)*0.8 : (f===4 ? 7 : 5), pressed(), norm(sub(K[f], M[f])), barreOnly && HAND_CFG.barreFist);
     }
     const axis = norm(cross(sub(pts[3],pts[0]), H.N));
     fingers[f] = {mode, pts, string, axis};
