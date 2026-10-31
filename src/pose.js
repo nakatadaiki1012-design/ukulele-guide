@@ -31,6 +31,7 @@ export const HAND_CFG = {
   barreThumbX: -6,                                 // セーハ：親指の腹を、人差し指（セーハ）の真裏からボディ側へ何mmずらすか
   barreP: 2,                                       // セーハ：第二関節の位置（フレットの手前6mmからの前後。大きいほどフレット寄り）
   barreRoll: 45,                                   // セーハ：人差し指を親指側の縁で押さえるようにねじる角度
+  barreFist: true, fistMcp: 45, fistPip: 90,       // セーハ中、使わない指を手のひらの方へ軽くにぎる（付け根・第二関節の曲げ角の目安）
   barreOver: 26,                                   // セーハの指先が、G側の端の弦より外へはみ出してよい長さ
   barreSlantFrom: 0, barreSlantW: 1.5,             // セーハ：付け根と第二関節の前後（フレット方向）のずれ。これを超えた分にコスト（指をフレットと平行に）
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
@@ -70,20 +71,29 @@ function chain2(L, th, p2, p3){
 /* 待っている指：力を抜いた形（つけ根 約40°・第二関節 約50°）を基本に、
    「弦に触れない高さ」「だいたい自分のフレット・弦の上」を保つように、曲げ角を少しだけ変える。
    決まった点に指先を合わせないので、近すぎる点に合わせて「く」の字に縮こまることがない */
-function relaxedFinger(f, Lbone, K, T, H, lift, others=[], dm=null){
+function relaxedFinger(f, Lbone, K, T, H, lift, others=[], dm=null, fist=false){
   const R = RAD[f], c = COUPLE[f];
   const L = [Lbone[0], Lbone[1], Lbone[2]+PAD_EXT];
-  const d = sub(T,K); let e = sub(d, mul(H.N, dot(d,H.N)));             // つけ根 → 待つ場所 の向き（手のひらの向きと直角な成分）
+  // fist：セーハの間の使わない指。手のひらの方へ軽くにぎり込む（写真のように、人差し指の下で拳に近い形）
+  const d = fist ? H.F : sub(T,K); let e = sub(d, mul(H.N, dot(d,H.N)));             // つけ根 → 待つ場所 の向き（手のひらの向きと直角な成分）
   e = vlen(e) > 1e-6 ? norm(e) : norm(sub(H.F, mul(H.N, dot(H.F,H.N))));
   const toW = ([u,v]) => add(K, add(mul(e,u), mul(H.N,v)));
   let best = null;
-  for(let th=-36; th<=30; th+=6) for(let p2=20; p2<=100; p2+=5){
+  const thR = fist ? [-80, 80] : [-36, 30], pR = fist ? [40, 110] : [20, 100];
+  for(let th=thR[0]; th<=thR[1]; th+=6) for(let p2=pR[0]; p2<=pR[1]; p2+=5){
     const pts = chain2(L, th*DEG, p2*DEG, c*p2*DEG).map(toW);
     const pad = pts[3];
-    let cost = ((th+12)*(th+12) + (p2-55)*(p2-55))/900 + Math.max(0, p2-82)*Math.max(0, p2-82)/260;   // 楽な形（少しそらせてから、第二関節で曲げる）からの違い。深く曲げすぎない
+    let cost;
+    if(fist){
+      cost = ((Math.abs(th)-HAND_CFG.fistMcp)**2 + (p2-HAND_CFG.fistPip)**2)/900;
+      // 指板の上に来る時だけ、弦に触れない高さを保つ（ネックの外では、手のひらの方へ丸めてよい）
+      if(Math.abs(pad[1]) < halfW(pad[0]) + 4){ const need = stringZ(pad[0]) + PAD_R + lift; cost += Math.pow(Math.max(0, need - pad[2]), 2)*0.6; }
+    } else {
+    cost = ((th+12)*(th+12) + (p2-55)*(p2-55))/900 + Math.max(0, p2-82)*Math.max(0, p2-82)/260;   // 楽な形（少しそらせてから、第二関節で曲げる）からの違い。深く曲げすぎない
     const need = stringZ(pad[0]) + PAD_R + lift;                           // 指の腹の高さ（弦から lift mm）
     cost += Math.pow(Math.max(0, need - pad[2]), 2)*0.6 + Math.pow(Math.max(0, pad[2] - need - 6), 2)*0.03;
     cost += Math.pow((pad[0]-T[0])/12, 2)*0.8 + Math.pow((pad[1]-T[1])/14, 2)*0.5;
+    }
     for(let s=0;s<3;s++) for(let t=0;t<=1.001;t+=0.25){                   // 弦に触れない
       const P = lerp3(pts[s],pts[s+1],t), r = lerp(R[s],R[s+1],t);
       if(Math.abs(P[1]) < halfW(P[0]) + r*0.5){ const cl = P[2]-r-(stringZ(P[0])+1.0); if(cl<0) cost += cl*cl*2; }
@@ -303,7 +313,7 @@ function buildHand(chord, rig, prm, thumbStart){
       // 押さえる指が1本もない（開放弦だけの）コードは、指を弦のすぐ上に添える（宙に浮かせない）。
       // 押さえる指がある時は、その指の邪魔にならない高さに浮かせる
       const idle = !barre && Object.keys(used).length === 0;
-      pts = relaxedFinger(f, L, K[f], T, H, idle ? 2 + (f-1)*0.8 : (f===4 ? 7 : 5), pressed(), norm(sub(K[f], M[f])));
+      pts = relaxedFinger(f, L, K[f], T, H, idle ? 2 + (f-1)*0.8 : (f===4 ? 7 : 5), pressed(), norm(sub(K[f], M[f])), !!barre && HAND_CFG.barreFist);
     }
     const axis = norm(cross(sub(pts[3],pts[0]), H.N));
     fingers[f] = {mode, pts, string, axis};
