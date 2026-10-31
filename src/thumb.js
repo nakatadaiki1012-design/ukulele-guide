@@ -95,7 +95,7 @@ export function solveThumb(M, toW, toWd, opts){
         if(g < gm){ gm = g; cp = P; }
       }
       c += gm > 1 ? (gm-1)*(gm-1)*0.6 : 0;
-      c += Math.pow(cp[0]-xTarget, 2)*0.02;
+      c += Math.pow(cp[0]-xTarget, 2)*(opts.xW ?? 0.02);
       // 2b) 親指の先がネックの上の縁（1弦Gの側）からのぞく
       const over = W[3][1] + halfW(W[3][0]) + opts.peek;        // 縁より peek mm 上に出ればゼロ
       if(over > 0) c += over*over*0.3;

@@ -169,7 +169,7 @@ function currentPose(now){
 }
 window.setChord = setChord; window.__strumState = strumState;
 // 表を作る時・検証用（tools/make-pose-table.mjs から使う）
-window.__dbg = { chordNames: () => ROOTS.flatMap(r=>TYPES.map(t=>r.id+t.id)), chordPose: n => computePose(getChord(n), view.rig),
+window.__dbg = { chordNames: () => ROOTS.flatMap(r=>TYPES.map(t=>r.id+t.id)), chord: n => getChord(n), chordPose: n => computePose(getChord(n), view.rig),
                  dumpPoseTable, setPoseTable, clearCache: () => clearPoseCache() };
 // コードのボタンを押した時：手がすばやく次の形になり、押さえ終わると同時にジャラーンと鳴る
 function pickChord(name){
