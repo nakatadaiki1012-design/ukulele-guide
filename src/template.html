@@ -197,6 +197,18 @@
   .picker .typemore button{flex:1 0 auto;min-width:52px;font-size:13px}
   .row[hidden]{display:none!important}
   .picker #typeRow button{font-size:13px}
+  /* 並べ方の切り替え（音名順／キーで並べる）：小さく1行に */
+  .pmode{align-items:center;gap:6px;margin-bottom:6px}
+  .pmode .seg{display:inline-flex;gap:0;flex:0 0 auto}
+  .pmode .seg button{flex:0 0 auto;min-width:0;padding:2px 9px;font-size:11px;font-weight:700;border-radius:0}
+  .pmode .seg button:first-child{border-radius:999px 0 0 999px}
+  .pmode .seg button:last-child{border-radius:0 999px 999px 0}
+  .pmode select{flex:0 1 auto;font-size:12px;padding:2px 4px;border-radius:8px;background:var(--btn,#fff);color:inherit;border:1px solid var(--line)}
+  .pmode [hidden]{display:none!important}
+  /* キーのダイアトニックコード：7つ。上に度数（Ⅰ・Ⅱm…）を小さく */
+  .dia button{flex:1 1 0;min-width:0;padding:3px 0 5px;font-size:14px;line-height:1.15}
+  .dia button small{display:block;font-size:10px;font-weight:400;opacity:.65}
+  @media (max-width:640px){ .dia button{font-size:12px;letter-spacing:-.3px;white-space:nowrap} }
   @media (max-width:640px){
     header p{display:none}
     .app{padding:0 10px 12px;gap:10px}
@@ -320,6 +332,12 @@
   <!-- 右：コード選び＋タブ -->
   <div class="side">
     <section class="card picker">
+      <div class="row pmode" id="modeRow">
+        <span class="seg" id="pickMode"><button data-v="name" class="on">音名順</button><button data-v="key">キーで並べる</button></span>
+        <select id="keySel" aria-label="キー" hidden></select>
+        <span class="seg" id="diaSize" hidden><button data-v="3" class="on">3和音</button><button data-v="4">4和音</button></span>
+      </div>
+      <div class="row dia" id="diaRow" hidden></div>
       <div class="row keys" id="rootRow"></div>
       <div class="row" id="typeRow"></div>
       <div class="row typemore" id="typeMore" hidden></div>

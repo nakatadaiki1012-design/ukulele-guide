@@ -14,9 +14,9 @@ import { PATTERNS, strumState, idleState, STRUM_AMP, STRUM_CFG } from './strum.j
 window.__strumCfg = STRUM_CFG;
 
 const state = {root:'C', type:'', mirror:false, badges:true, ghost:true, rightMode:'always', speed:1, swing:false, split:false, vib:[0,0,0,0],
-               bg:'day', finish:'mahogany', chart:true};
+               bg:'day', finish:'mahogany', chart:true, pickMode:'name', key:'C', dia:'3'};
 // 設定は次に開いた時も同じになるように覚えておく（覚えられない端末ではそのまま）
-const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam'];
+const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam','pickMode','key','dia'];
 try{ const sv = JSON.parse(localStorage.getItem('ukeSettings') || '{}'); for(const k of SAVED) if(k in sv) state[k] = sv[k]; }catch(e){}
 const saveSettings = () => { try{ localStorage.setItem('ukeSettings', JSON.stringify(Object.fromEntries(SAVED.map(k=>[k, state[k]])))); }catch(e){} };
 let view = null, rig = null;
@@ -186,7 +186,7 @@ function splitName(name){
 
 /* 根音のボタン：ピアノの鍵盤のように並べる（白鍵7つの間に、半音の黒鍵5つを小さく重ねる）。
    12種類あっても1段に収まる */
-const rootRow = document.getElementById('rootRow'), typeRow = document.getElementById('typeRow'), typeMore = document.getElementById('typeMore');
+const modeRow = document.getElementById('modeRow'), rootRow = document.getElementById('rootRow'), typeRow = document.getElementById('typeRow'), typeMore = document.getElementById('typeMore');
 let whites = 0;
 ROOTS.forEach(r=>{
   const b = document.createElement('button'); b.dataset.root = r.id;
@@ -204,7 +204,53 @@ TYPES.filter(t=>!t.more).forEach(t=>typeRow.appendChild(typeBtn(t)));
 const moreBtn = document.createElement('button'); moreBtn.className = 'more'; typeRow.appendChild(moreBtn);
 moreBtn.onclick = ()=>{ typeMore.hidden = !typeMore.hidden; updateButtons(); };
 TYPES.filter(t=>t.more).forEach(t=>typeMore.appendChild(typeBtn(t)));
+/* キーで並べる：選んだキー（調）のダイアトニックコード7つを、度数の順に並べる。
+   メジャーキー：Ⅰ Ⅱm Ⅲm Ⅳ Ⅴ Ⅵm Ⅶdim（4和音：Ⅰmaj7 Ⅱm7 Ⅲm7 Ⅳmaj7 Ⅴ7 Ⅵm7 Ⅶm7-5）
+   マイナーキー（自然的短音階）：Ⅰm Ⅱdim ♭Ⅲ Ⅳm Ⅴm ♭Ⅵ ♭Ⅶ（4和音：Ⅰm7 Ⅱm7-5 ♭Ⅲmaj7 Ⅳm7 Ⅴm7 ♭Ⅵmaj7 ♭Ⅶ7） */
+const NUM = ['Ⅰ','Ⅱ','Ⅲ','Ⅳ','Ⅴ','Ⅵ','Ⅶ'];
+const SCALE = {
+  maj: {step:[0,2,4,5,7,9,11], tri:['','m','m','','','m','dim'], sev:['maj7','m7','m7','maj7','7','m7','m7-5'], flat:[0,0,0,0,0,0,0]},
+  min: {step:[0,2,3,5,7,8,10], tri:['m','dim','','m','m','',''], sev:['m7','m7-5','maj7','m7','m7','maj7','7'], flat:[0,0,1,0,0,1,1]}
+};
+const KEYS = [...ROOTS.map(r=>({id:r.id, label:`${r.id} メジャー`, root:r.id, sc:'maj'})),
+              ...ROOTS.map(r=>({id:r.id+'m', label:`${r.id}m マイナー`, root:r.id, sc:'min'}))];
+const keySel = document.getElementById('keySel'), diaRow = document.getElementById('diaRow');
+const pickModeEl = document.getElementById('pickMode'), diaSizeEl = document.getElementById('diaSize');
+KEYS.forEach(k=>{ const o = document.createElement('option'); o.value = k.id; o.textContent = k.label; keySel.appendChild(o); });
+function diatonic(){
+  const k = KEYS.find(k=>k.id===state.key) || KEYS[0], S = SCALE[k.sc];
+  const r0 = ROOTS.findIndex(r=>r.id===k.root);
+  return S.step.map((st,i)=>{
+    const root = ROOTS[(r0+st)%12].id, type = (state.dia==='4' ? S.sev : S.tri)[i];
+    return {name: root+type, deg: (S.flat[i] ? '♭' : '') + NUM[i]};
+  });
+}
+function buildDia(){
+  diaRow.innerHTML = '';
+  for(const d of diatonic()){
+    const b = document.createElement('button'); b.dataset.name = d.name;
+    b.innerHTML = `<small>${d.deg}</small>${d.name}`;
+    b.onclick = ()=>pickChord(d.name);
+    diaRow.appendChild(b);
+  }
+}
+function applyPickMode(){
+  const key = state.pickMode === 'key';
+  rootRow.hidden = typeRow.hidden = key; if(key) typeMore.hidden = true;
+  diaRow.hidden = keySel.hidden = diaSizeEl.hidden = !key;
+  pickModeEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.v===state.pickMode));
+  diaSizeEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.v===state.dia));
+  keySel.value = state.key;
+  if(key) buildDia();
+  updateButtons();
+}
+pickModeEl.querySelectorAll('button').forEach(b=>b.onclick = ()=>{ state.pickMode = b.dataset.v; saveSettings(); applyPickMode(); });
+diaSizeEl.querySelectorAll('button').forEach(b=>b.onclick = ()=>{ state.dia = b.dataset.v; saveSettings(); applyPickMode(); });
+keySel.onchange = ()=>{ state.key = keySel.value; saveSettings(); applyPickMode(); };
+applyPickMode();
+
 function updateButtons(){
+  diaRow.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.name===state.root+state.type));
   rootRow.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.root===state.root));
   [...typeRow.querySelectorAll('button[data-type]'), ...typeMore.querySelectorAll('button')].forEach(b=>{
     b.classList.toggle('on', b.dataset.type===state.type);
@@ -300,7 +346,7 @@ function updateFs(){
 function setFS(on){
   fsOn = on;
   document.body.classList.toggle('fs', on);
-  if(on) fsBar.append(rootRow, typeRow, typeMore); else document.querySelector('.side .picker').append(rootRow, typeRow, typeMore);
+  if(on) fsBar.append(modeRow, diaRow, rootRow, typeRow, typeMore); else document.querySelector('.side .picker').append(modeRow, diaRow, rootRow, typeRow, typeMore);
   fsBtn.textContent = on ? '✕' : '⛶'; fsBtn.title = on ? '全画面をやめる' : '全画面';
   try{
     if(on && !document.fullscreenElement) document.documentElement.requestFullscreen?.()?.catch?.(()=>{});
