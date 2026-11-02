@@ -858,7 +858,9 @@ createView({
   const first = new Set([...SONGS.flatMap(sg=>sg.bars.flat().map(c=>c[0])), ...PROGRESSIONS.flatMap(p=>p.chords)]);
   const all = ROOTS.flatMap(r=>TYPES.map(t=>r.id+t.id));
   const rest = [...first, ...Object.keys(CHORDS).filter(c=>!first.has(c)), ...all.filter(c=>!first.has(c) && !CHORDS[c])];
-  const idle = window.requestIdleCallback || (fn=>setTimeout(()=>fn({timeRemaining:()=>8}), 30));
+  // requestIdleCallback がない端末（iPhone の Safari など）では、setTimeout で代わりに呼ぶ。
+  // その時の「残り時間」は呼ばれてからの経過で減らす（固定値だと、全部のコードを一度に計算して数秒止まっていた）
+  const idle = window.requestIdleCallback || (fn=>setTimeout(()=>{ const t0 = performance.now(); fn({timeRemaining:()=>Math.max(0, 8-(performance.now()-t0))}); }, 30));
   // 1つの手の形の計算は0.1〜0.3秒かかり、途中で止められない。演奏中・手やカメラが動いている間にやると
   // その間だけ画面が止まる（カクつく）ので、止まっている時だけ進める
   const busy = () => playing() || poseFrom || oneShot || wasMoving;
@@ -866,7 +868,9 @@ createView({
   rest.unshift(...[-9,-6,-3,0,3,6,9,12].map(f=>()=>view.rightHandPose(view.rigR, {theta:0, lift:0, wrist:0, roll:0, flick:f})));
   const work = dl => {
     if(busy()){ setTimeout(()=>idle(work), 800); return; }
-    while(rest.length && dl.timeRemaining() > 4 && !busy()){ const job = rest.shift(); typeof job === 'function' ? job() : computePose(getChord(job), view.rig); }
+    // 1回に使うのは最大でも約10ms（画面の1コマより短く。押した時の反応を遅らせない）
+    const t0 = performance.now();
+    while(rest.length && dl.timeRemaining() > 4 && performance.now() - t0 < 10 && !busy()){ const job = rest.shift(); typeof job === 'function' ? job() : computePose(getChord(job), view.rig); }
     if(rest.length) idle(work);
   };
   idle(work);
