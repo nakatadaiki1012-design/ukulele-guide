@@ -626,6 +626,16 @@ function renderSong(){
           ? `<button class="cb muted" data-beat="${sg.startBeat ?? i*sg.beats}" title="アウフタクト（メロディだけ）">♪</button>`
           : b.map(([c,n])=>{ const beat = i*sg.beats + off; off += n;
               return `<button class="cb" data-beat="${beat}" data-c="${c}" title="押すと鳴らす・ここから演奏">${c}${sg.onceBars?.has(i) ? '<small>1拍</small>' : ''}</button>`; }).join('')}</div>`; }).join('');
+  // きれいにそろえる：1行にコード弾きは8小節・ソロ弾きは4小節。アウフタクト（1小節目が弾き出しだけ）の曲は、
+  // その小節を左の細い列に置いて、2小節目から行の頭がそろうようにする
+  const per = sg.solo ? 4 : 8, pick = sg.silentBars?.has(0) || !!(sg.solo && sg.startBeat);
+  songSheet.style.gridTemplateColumns = (pick ? 'auto ' : '') + `repeat(${per}, minmax(0,1fr))`;
+  songSheet.querySelectorAll('.bar').forEach((el,i)=>{
+    const j = pick ? i-1 : i;
+    if(pick && i === 0){ el.style.gridRow = '1'; el.style.gridColumn = '1'; el.classList.add('pick'); return; }
+    el.style.gridRow = String(Math.floor(j/per) + 1); el.style.gridColumn = String(j%per + 1 + (pick ? 1 : 0));
+    el.classList.toggle('phrase', j % 4 === 0);
+  });
   song.hl = null; highlightSong(-1);
 }
 function highlightSong(bar){

@@ -270,7 +270,7 @@
   .song-sheet .bar{display:flex;gap:6px;justify-content:center;padding:6px 2px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);font-weight:800;font-size:14px}
   .song-sheet .bar span+span{color:var(--sub)}
   /* ソロ弾きの楽譜：小節を箱にせず、1行に流して並べる（小節の区切りは縦線）。コード名は小節の頭に小さく */
-  .song-sheet.solo{display:flex;flex-wrap:wrap;row-gap:3px;gap:0}
+  .song-sheet.solo{display:grid;row-gap:4px;column-gap:0}
   .song-sheet .bar.solo{display:flex;align-items:flex-end;gap:0;padding:0 3px;border:0;border-left:1px solid var(--line);border-radius:0;background:none;font-size:12px;font-weight:800}
   .song-sheet .bar.solo em{font-style:normal;font-size:9px;color:var(--accent);align-self:flex-start;margin-right:1px;line-height:1}
   .song-sheet .bar .nt{padding:1px 2px;min-width:0;border-radius:5px;font-weight:800;font-size:12px;line-height:1.05;background:none;border:1px solid transparent;color:inherit;flex:0 0 auto}
@@ -281,13 +281,25 @@
   .song-sheet .bar .nt.now small{color:#fff}
   .song-sheet .bar.solo.now{background:none;color:inherit;border-color:var(--line)}
   /* コード弾きの楽譜：小節を1行に流して並べる（区切りは縦線）。コードは押せる */
-  .song-sheet.flow{display:flex;flex-wrap:wrap;row-gap:4px;gap:0}
-  .song-sheet .bar.fl{display:flex;gap:2px;padding:0 3px;border:0;border-left:1px solid var(--line);border-radius:0;background:none}
-  .song-sheet .bar .cb{padding:3px 6px;min-width:30px;border-radius:6px;font-size:13px;font-weight:800;line-height:1.1}
+  .song-sheet.flow{display:grid;row-gap:4px;column-gap:0}
+  .song-sheet .bar.fl{display:flex;gap:2px;padding:0 2px;min-width:0;border:0;border-left:1px solid var(--line);border-radius:0;background:none}
+  .song-sheet .bar .cb{flex:1 1 0;padding:3px 0;min-width:0;border-radius:6px;font-size:13px;font-weight:800;line-height:1.1;white-space:nowrap}
   .song-sheet .bar .cb small{font-size:9px;font-weight:400;margin-left:1px;opacity:.75}
   .song-sheet .bar .cb.sel{border-color:var(--accent)}
   .song-sheet .bar.fl.now{background:none;border-color:var(--line)}
   .song-sheet .bar.fl.now .cb{background:var(--on);color:#fff;border-color:var(--on)}
+  /* 4小節ごとの区切りは少し太い線。アウフタクトの小節は左の細い列に */
+  .song-sheet .bar.phrase{border-left:2px solid var(--sub)}
+  .song-sheet .bar.pick{border-left:0;padding-right:4px}
+  .song-sheet .bar.pick .cb{flex:0 0 auto;padding:3px 6px}
+  /* ソロ：1小節の音は折り返さず1行に（コード名は小節の左上に小さく重ねる） */
+  .song-sheet .bar.solo{position:relative;flex-wrap:nowrap;justify-content:space-around;align-items:flex-end;min-width:0;padding:9px 1px 0}
+  .song-sheet .bar.solo em{position:absolute;left:3px;top:0}
+  .song-sheet .bar.solo .nt{flex:0 1 auto;min-width:0;padding:1px 1px;font-size:11.5px;letter-spacing:-.5px}
+  .song-sheet .bar.solo .nt b{white-space:nowrap}
+  @media (max-width:420px){ .song-sheet .bar.solo .nt{font-size:10.5px;letter-spacing:-.8px} }
+  .song-sheet .bar .cb small{display:none}
+  @media (min-width:420px){ .song-sheet .bar .cb small{display:inline} }
   .song-sheet .bar.now{background:var(--on);color:#fff;border-color:var(--on)}
   .song-sheet .bar.now span+span{color:#d6f3f1}
   #songList{display:flex;gap:4px;flex-wrap:wrap}
