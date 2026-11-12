@@ -141,12 +141,10 @@ export const SONGS = [
   },
   {
     id:'alohaoe', title:'アロハ・オエ', short:'アロハ・オエ', credit:'作詞作曲：リリウオカラニ女王（1878年）',
-    key:'G', beats:4, bpm:80, pattern:'D--UD-DU', note:'ゆったりしたバラード。後半8小節がサビ（C→G→D7→G）',
-    // いただいたMIDI（16小節・Gのキー・テンポ80）を解析して、メロディ（いちばん上の声部）とコード進行を取り出したもの
-    bars:[[['G',2],['C',2]],['G'],['D7'],['D7'],[['G',2],['C',2]],['G'],[['C',1],['A7',1],['D7',2]],['G'],
-          ['C'],['G'],['D7'],['G'],['C'],['G'],['D7'],['G']],
-    pickup:1,
-    melody:[[74,0.5],[79,0.5],[83,1.5],[81,0.5],[79,0.75],[78,0.25],[79,0.5],[76,0.5],[74,2.75],[null,0.75],[83,0.5],[81,0.5],[81,1],[80,0.5],[81,0.5],[81,0.5],[84,0.5],[83,0.5],[81,2.25],[null,0.75],[74,0.5],[79,0.5],[83,1.5],[81,0.5],[79,0.75],[78,0.25],[79,0.5],[76,0.5],[74,2.5],[null,0.5],[79,0.5],[78,0.5],[76,1],[81,0.5],[79,0.5],[78,0.5],[null,0.5],[83,0.5],[81,0.5],[79,3.5],[74,0.5],[76,1],[79,1],[84,2],[74,1],[79,1],[83,1.5],[79,0.5],[78,0.75],[76,0.25],[78,0.5],[79,0.5],[81,0.5],[81,0.5],[84,0.5],[84,0.5],[83,2],[79,1.5],[null,0.5],[76,1],[79,1],[84,2],[74,1],[79,1],[83,1.5],[79,0.5],[78,0.75],[76,0.25],[78,0.5],[79,0.5],[83,0.5],[81,1.5],[79,2],[79,2]]
+    key:'G', beats:4, bpm:80, pattern:'D-DU-UDU', swing:true, startBeat:3,
+    note:'コード弾き。スイングで「ジャ(ン)ジャッカ(ンッ)カジャッカ」。コード進行とメロディは「アロハ・オエ ソロ」と同じ（最初の「ソ」はアウフタクト）',
+    // コード進行とメロディは、ソロ弾きの曲（いただいたウクレレ譜）から作る（下の「soloFrom」）
+    soloFrom:'alohaoe-solo', bars:[]
   },
   {
     id:'alohaoe-solo', title:'アロハ・オエ（ソロ弾き）', short:'アロハ・オエ ソロ', credit:'作詞作曲：リリウオカラニ女王（1878年）／いただいたウクレレ譜（TAB付き）より',
@@ -184,6 +182,15 @@ for(const s of SONGS) if(s.solo){
     for(let j=i*s.beats*2; j<(i+1)*s.beats*2; j++){ const last = bar[bar.length-1]; if(last && last[0]===shape[j]) last[1] += 0.5; else bar.push([shape[j], 0.5]); }
     s.bars.push(bar);
   }
+}
+// コード弾きの曲を、ソロ弾きの曲の伴奏（コード進行）とメロディから作る。
+// 伴奏のない小節（アウフタクト）は弾かない、「1拍」の小節は1拍目だけ弾く
+for(const s of SONGS) if(s.soloFrom){
+  const src = SONGS.find(x=>x.id===s.soloFrom);
+  s.bars = src.accomp.map((a,i)=>[[a ? a[0] : (src.accomp.find(Boolean)||['G'])[0], s.beats]]);
+  s.silentBars = new Set(src.accomp.map((a,i)=>a ? -1 : i).filter(i=>i>=0));
+  s.onceBars = new Set(src.accomp.map((a,i)=>a && a[1] < s.beats ? i : -1).filter(i=>i>=0));
+  s.melodyNotes = src.solo.map(([beat, len, si, f])=>({midi: STRING_MIDI[si] + f, beat, len}));
 }
 // 1小節の中身を [コード, 拍数] にそろえる
 for(const s of SONGS) s.bars = s.bars.map(b => b.length===1 && !Array.isArray(b[0]) ? [[b[0], s.beats]] : b.map(c => Array.isArray(c) ? c : [c, s.beats]));

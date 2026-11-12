@@ -609,9 +609,9 @@ function renderSong(){
   document.getElementById('songInfo').innerHTML =
     `<b>${sg.title}</b><span>${sg.credit}</span><span>キー：${sg.key}・${sg.beats}拍子・` +
     (sg.solo ? '右手 人差し指で1音ずつ' : `右手 ${[...sg.pattern].map(c=>c==='D'?'↓':c==='U'?'↑':'・').join('')}`) + `</span><span>${sg.note}</span>` +
-    ((sg.melody || sg.score || sg.solo) ? '' : '<span class="muted">※この曲は伴奏（コードとストローク）だけのデモです</span>');
+    ((sg.melody || sg.score || sg.solo || sg.melodyNotes) ? '' : '<span class="muted">※この曲は伴奏（コードとストローク）だけのデモです</span>');
   const bm = document.getElementById('btnMelody');
-  bm.style.display = (sg.melody || sg.score || sg.accomp) ? '' : 'none';
+  bm.style.display = (sg.melody || sg.score || sg.accomp || sg.melodyNotes) ? '' : 'none';
   bm.textContent = sg.accomp ? '伴奏' : 'メロディ'; bm.classList.toggle('on', sg.accomp ? song.accompOn : song.melodyOn);
   // ソロ弾きは、小節ごとに弾く音（弦・フレット）を並べる
   // 音はドレミで、下に小さく弦とフレット（「E3」＝E弦の3フレット、「A0」＝A弦の開放）。押すとその音が鳴り、そこから演奏できる
@@ -620,7 +620,8 @@ function renderSong(){
   songSheet.classList.toggle('solo', !!sg.solo);
   songSheet.innerHTML = sg.solo
     ? sg.bars.map((b,i)=>`<div class="bar solo">${sg.accomp && sg.accomp[i] ? `<em>${sg.accomp[i][0]}</em>` : ''}${sg.solo.map((n,j)=>[n,j]).filter(([n])=>Math.floor(n[0]/sg.beats)===i).map(([n,j])=>`<button class="nt" data-i="${j}" title="${STRING_NAMES[n[2]]}弦 ${n[3] ? n[3]+'フレット' : '開放'}（押すと鳴らす・ここから演奏）"><b>${doremi(STRING_MIDI[n[2]]+n[3])}</b><small>${STRING_NAMES[n[2]]}${n[3]}</small></button>`).join('') || '<span class="rest">𝄽</span>'}</div>`).join('')
-    : sg.bars.map(b=>`<div class="bar">${b.map(c=>`<span>${c[0]}</span>`).join('')}</div>`).join('');
+    : sg.bars.map((b,i)=>`<div class="bar">${sg.silentBars?.has(i) ? '<span class="muted">♪</span>'          // アウフタクト（メロディだけ）
+        : b.map(c=>`<span>${c[0]}${sg.onceBars?.has(i) ? '<small>（1拍）</small>' : ''}</span>`).join('')}</div>`).join('');
   song.hl = null; highlightSong(-1);
 }
 function highlightSong(bar){
@@ -703,7 +704,9 @@ function tickSong(){
     }
     const slot = k % spb, bar = Math.floor(k/spb), last = bar === sg.bars.length-1;
     const c = chordAt(sg, k);
-    const st = last ? (slot===0 ? 'D' : '-') : sg.pattern[slot];
+    let st = last ? (slot===0 ? 'D' : '-') : sg.pattern[slot];
+    if(sg.silentBars?.has(bar)) st = '-';                                // 弾かない小節（アウフタクト）
+    else if(sg.onceBars?.has(bar)) st = slot===0 ? 'D' : '-';            // 1拍目だけ弾く小節
     const chord = getChord(c);
     if(st==='D') playStroke(chord, 'D', when, slot===0 ? 0.30 : 0.24);
     if(st==='U') playStroke(chord, 'U', when, 0.15);
@@ -724,6 +727,7 @@ function startSong(fromBeat=null){
   // メロディの開始位置（拍）
   let b = -(sg.pickup||0); song.notes = []; song.mel = 0;
   if(sg.melody) for(const [midi, len] of sg.melody){ song.notes.push({midi, beat:b, len}); b += len; }
+  if(sg.melodyNotes) song.notes.push(...sg.melodyNotes);
   if(sg.score){ for(const [midi, beat] of sg.score) song.notes.push({midi, beat, len:1, bell:true}); song.notes.sort((x,y)=>x.beat-y.beat); }
   song.running = true;
   setChord(chordAt(sg, Math.max(0, st0)));
