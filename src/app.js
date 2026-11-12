@@ -438,6 +438,7 @@ document.getElementById('camMatch').onclick = ()=>{
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick = ()=>{
   document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('on', x===b));
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id === 'tab-'+b.dataset.tab));
+  if(typeof renderTab === 'function') renderTab();      // タブ譜は「曲デモ」でソロ弾きの曲の時だけ
   kick();
 });
 
@@ -637,6 +638,7 @@ function renderSong(){
     el.classList.toggle('phrase', j % 4 === 0);
   });
   song.hl = null; highlightSong(-1);
+  renderTab();
 }
 function highlightSong(bar){
   if(song.hl === bar) return; song.hl = bar;
@@ -778,17 +780,55 @@ songSheet.addEventListener('click', e=>{
   ensureAudio();
   song.sel = i; song.selBeat = n[0];
   songSheet.querySelectorAll('.nt').forEach(x=>x.classList.toggle('sel', x===b));
+  tabScroll.querySelectorAll('.tn').forEach(x=>x.classList.toggle('sel', +x.dataset.i === i));
+  if(!song.running) tabScroll.scrollTo({left: Math.max(0, tabX(n[0]) - TAB_X0 - 40), behavior:'smooth'});
   if(song.running){ stopSong(); startSong(n[0]); return; }
   playString(n[2], n[3], actx.currentTime + 0.02, 0.45);
   setChord(soloShape(n[2], n[3]));
   document.getElementById('btnSong').textContent = '▶ ここから演奏';
 });
+/* ソロ弾きのタブ譜：上から A・E・C・G 弦の4本線に、押さえるフレットの数字。上にコード名、下にドレミ。
+   横にスクロールでき、数字を押すと楽譜の音を押した時と同じ（鳴らす・そこから演奏） */
+const tabStrip = document.getElementById('tabStrip'), tabScroll = document.getElementById('tabScroll');
+const TAB_PPB = 34, TAB_X0 = 72, TAB_LINE = [26, 38, 50, 62];      // 1拍の幅・最初の位置・弦の線の高さ（A E C G の順）
+const tabX = beat => TAB_X0 + beat*TAB_PPB;
+function renderTab(){
+  const sg = SONG();
+  const show = !!sg.solo && activeTab() === 'songs';
+  tabStrip.hidden = !show;
+  if(!show){ tabScroll.innerHTML = ''; return; }
+  const beats = sg.soloBars*sg.beats, W = tabX(beats) + 260, ly = si => TAB_LINE[3-si];
+  let s = `<svg width="${W}" height="92" viewBox="0 0 ${W} 92" xmlns="http://www.w3.org/2000/svg">`;
+  ['A','E','C','G'].forEach((n,i)=>{ s += `<line x1="${TAB_X0-14}" x2="${tabX(beats)}" y1="${TAB_LINE[i]}" y2="${TAB_LINE[i]}" stroke="#9a8f84" stroke-width="1"/>`;
+    s += `<text x="${TAB_X0-24}" y="${TAB_LINE[i]+4}" font-size="10" fill="#8a7f74" text-anchor="middle">${n}</text>`; });
+  s += `<text x="${TAB_X0-40}" y="48" font-size="12" font-weight="800" fill="#8a7f74" text-anchor="middle" transform="rotate(-90 ${TAB_X0-40} 44)">TAB</text>`;
+  for(let i=0; i<=sg.soloBars; i++){
+    const x = tabX(i*sg.beats) - (i ? 6 : 14);
+    s += `<line x1="${x}" x2="${x}" y1="${TAB_LINE[0]}" y2="${TAB_LINE[3]}" stroke="#6b6158" stroke-width="${i===sg.soloBars ? 2.5 : 1}"/>`;
+    const ac = sg.accomp && sg.accomp[i];
+    if(ac && i < sg.soloBars) s += `<text x="${x+4}" y="13" font-size="11" font-weight="800" fill="#13a89e">${ac[0]}</text>`;
+  }
+  sg.solo.forEach(([b, len, si, f], j)=>{
+    const x = tabX(b), y = ly(si), w = String(f).length*8 + 6;
+    s += `<g class="tn" data-i="${j}"><rect x="${x-w/2}" y="${y-8}" width="${w}" height="16" rx="4"/><text x="${x}" y="${y+4.5}" text-anchor="middle">${f}</text></g>`;
+    s += `<text x="${x}" y="84" font-size="10" fill="#6b6158" text-anchor="middle">${doremi(STRING_MIDI[si]+f)}</text>`;
+  });
+  tabScroll.innerHTML = s + '</svg>';
+  tabScroll.scrollLeft = 0;
+}
+tabScroll.addEventListener('click', e=>{
+  const g = e.target.closest('.tn'); if(!g) return;
+  songSheet.querySelector(`.nt[data-i="${g.dataset.i}"]`)?.click();     // 楽譜の音を押したのと同じ
+});
+// 演奏中：今の位置（拍）が左の線に来るようにスクロール
+function scrollTab(beat){ if(!tabStrip.hidden) tabScroll.scrollLeft = Math.max(0, tabX(beat) - TAB_X0); }
 // 演奏中は、いま弾いている音を光らせる
 function highlightNote(ph){
   const sg = SONG(); if(!sg.solo) return;
   let i = -1; if(ph >= 0) for(let j=0;j<sg.solo.length;j++){ if(sg.solo[j][0]*2 <= ph + 0.01) i = j; else break; }
   if(i === song.hn) return; song.hn = i;
   songSheet.querySelectorAll('.nt').forEach(x=>x.classList.toggle('now', +x.dataset.i === i));
+  tabScroll.querySelectorAll('.tn').forEach(x=>x.classList.toggle('now', +x.dataset.i === i));
 }
 renderSong();
 
@@ -909,7 +949,7 @@ function loop(now){
       pose = musicPose(pl, phL);
       upcoming(pl, phL);
       if(pl.o === prog) highlightProg(ph < 0 ? -1 : (prog.pos + Math.floor(ph/8)) % prog.list.length, ph < 0 ? -1 : Math.floor(ph) % 8);
-      else { highlightSong(ph < 0 || ph >= pl.end ? -1 : Math.floor(ph/pl.spb)); highlightNote(ph >= pl.end ? -1 : ph); }
+      else { highlightSong(ph < 0 || ph >= pl.end ? -1 : Math.floor(ph/pl.spb)); highlightNote(ph >= pl.end ? -1 : ph); if(SONG().solo) scrollTab(Math.max(0, ph/2)); }
     } else pose = currentPose(now);
     const right = window.__forceRight || smoothRight(showRight ? rightState(now, pl, phR) : null, now);
     view.render(pose, {...state, right, quality, animating: handMoving || active});

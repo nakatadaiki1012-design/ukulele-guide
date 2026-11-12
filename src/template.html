@@ -172,6 +172,17 @@
   .fpick{display:flex;gap:6px;margin:6px 0 0;flex-wrap:wrap}
   .fpick button{padding:4px 10px;font-size:12px;font-weight:700;color:#1d2a30;border:2px solid transparent}
   .fpick button.focus{border-color:#1d2a30}
+  .tabstrip{position:relative;margin-top:8px;border-radius:10px;background:#faf8f3;border:1px solid var(--line);overflow:hidden}
+  .tabstrip[hidden]{display:none}
+  .tabscroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+  .tabscroll svg{display:block;max-width:none;width:auto;height:92px}
+  .tabscroll .tn{cursor:pointer}
+  .tabscroll .tn rect{fill:#faf8f3}
+  .tabscroll .tn text{fill:#1b1410;font-weight:800;font-size:13px}
+  .tabscroll .tn:hover rect,.tabscroll .tn.sel rect{fill:#d8f1ee}
+  .tabscroll .tn.now rect{fill:var(--accent)}
+  .tabscroll .tn.now text{fill:#fff}
+  .tabhead{position:absolute;top:0;bottom:0;left:72px;width:2px;background:var(--accent);opacity:.55;pointer-events:none}
   .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--dim);margin-top:6px;padding:0 2px}
   .legend span{display:inline-flex;align-items:center;gap:4px}
   .legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
@@ -352,6 +363,8 @@
       <div class="set-group"><span>表示</span><div class="opts" id="optShow"></div></div>
       <div class="set-group"><span>軽さ（重い端末は「軽い」に）</span><div class="opts" id="optQuality"></div></div>
     </div>
+    <!-- ソロ弾きの曲：タブ譜（横にスクロール。演奏中は今の位置が左の線に来るように流れる） -->
+    <div class="tabstrip" id="tabStrip" hidden><div class="tabscroll" id="tabScroll"></div><div class="tabhead"></div></div>
     <div class="legend">
       <span><i style="background:var(--f1)"></i>1 人差し指</span>
       <span><i style="background:var(--f2)"></i>2 中指</span>
