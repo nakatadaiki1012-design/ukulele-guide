@@ -79,7 +79,7 @@ function getSolo(name){
   const m = name.match(/^solo:(\d):(\d+)$/); if(!m) return null;
   const si = +m[1], f = +m[2], frets = [0,0,0,0], fingers = [0,0,0,0];
   frets[si] = f; if(f) fingers[si] = Math.min(4, f);
-  return {name, frets, fingers, barre:null, solo:true, label: doremi(STRING_MIDI[si] + f), sub: `${STRING_NAMES[si]}弦 ${f ? f+'フレット' : '開放'}`};
+  return {name, frets, fingers, barre:null, solo:true, play: si, label: doremi(STRING_MIDI[si] + f), sub: `${STRING_NAMES[si]}弦 ${f ? f+'フレット' : '開放'}`};
 }
 export function getChord(name){
   if(name.startsWith('solo:')) return getSolo(name);

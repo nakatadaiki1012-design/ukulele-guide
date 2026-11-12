@@ -130,8 +130,27 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
     marks.add(disc, ring, glow);
     return {disc, ring, glow};
   });
+  // 開放弦の印：弦そのもの（ナット〜ボディ）を光らせ、ナットのすぐ先に光る丸を出す。
+  // ソロ弾きでは弾く1本だけ、コードでは押さえない（開放で鳴る）弦全部
+  const OPEN_COLOR = '#5fe0ff';
+  const openLineMat = new THREE.MeshBasicMaterial({color:OPEN_COLOR, transparent:true, opacity:0.85, depthWrite:false});   // 弦の光は手に隠れる（手の上には描かない）
+  const openSet = [0,1,2,3].map(s=>{
+    const x0 = 1, x1 = slotCenter(16), a = new THREE.Vector3(x0, strY(s,x0), stringZ(x0)+0.2), b = new THREE.Vector3(x1, strY(s,x1), stringZ(x1)+0.2);
+    const line = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, a.distanceTo(b), 8, 1, true), openLineMat);
+    line.position.copy(a).add(b).multiplyScalar(0.5);
+    line.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), b.clone().sub(a).normalize());
+    line.renderOrder = 8;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:OPEN_COLOR, transparent:true, depthTest:false, depthWrite:false, opacity:0.95}));
+    glow.scale.set(15,15,1); glow.position.set(7, strY(s,7), stringZ(7)+1); glow.renderOrder = 9;
+    const disc = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:'#ffffff', transparent:true, depthTest:false})); disc.renderOrder = 10;
+    disc.position.set(7, strY(s,7), stringZ(7)+0.6);
+    marks.add(line, glow, disc);
+    return {line, glow, disc};
+  });
+  const openStrings = chord => chord.solo ? (chord.frets[chord.play] === 0 ? [chord.play] : []) : [0,1,2,3].filter(s=>chord.frets[s] === 0);
   function placeMarks(pose, ghost){
-    const chord = pose.chord;
+    const chord = pose.chord, op = openStrings(chord);
+    openSet.forEach((m,s)=>{ m.line.visible = m.glow.visible = m.disc.visible = op.includes(s); });
     for(let s=0;s<4;s++){
       const m = markSet[s], info = pose.str[s];
       m.disc.visible = m.ring.visible = m.glow.visible = !!info;
@@ -283,7 +302,7 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
     const showLabels = !VIEWS[viewName].fixed;
     if(showLabels) for(let n=1; n<=5; n++) at(P([slotCenter(n), -halfW(slotCenter(n))-8, 0]), 'lab fret', n+'<small>フレット</small>');
     if(showLabels) for(let s=0; s<4; s++){
-      const open = pose.chord.frets[s]===0;
+      const open = openStrings(pose.chord).includes(s);
       at(P([-9, strY(s,0), stringZ(0)+3]), 'lab str'+(open?' open':''), STRING_NAMES[s]+(open?'<small>○</small>':''));
     }
     if(opts.badges){
