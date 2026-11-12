@@ -62,7 +62,7 @@
 
 ## ファイルの構成（さわる人向け）
 - `index.html` … 完成品（これだけで動きます）
-- `src/` … 元のプログラム（`app.js` 画面・音、`pose.js` 手の形の計算、`handrig.js` 手のモデル、`uke.js` ウクレレのモデル、`view.js` 3D表示、`thumb.js` 親指、`strum.js` 右手のストローク、`data.js` コードと曲のデータ）
+- `src/` … 元のプログラム（`app.js` 画面の操作・練習と曲デモの進め方、`audio.js` 音（弦の音の合成・メロディ・クリック）、`diagram.js` 縦のコード表、`sheet.js` 曲デモの楽譜（コードの表・タブ譜）、`pose.js` 手の形の計算、`handrig.js` 手のモデル、`uke.js` ウクレレのモデル、`view.js` 3D表示、`thumb.js` 親指、`strum.js` 右手のストローク、`data.js` コードと曲のデータ）
 - `src/` を直したら `npm install` → `npm run build` で `index.html` を作り直します。
 
 ## 動作環境

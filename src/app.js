@@ -1,7 +1,10 @@
 /* =========================================================
    ウクレレ・ハンドガイド（画面の操作・音・説明）
    ========================================================= */
-import { STRING_NAMES, STRING_NUM, STRING_MIDI, FINGER_NAMES, FINGER_COLORS, ROOTS, TYPES, getChord, PROGRESSIONS, CHORDS, SONGS, doremi, soloShape } from './data.js';
+import { ROOTS, TYPES, getChord, PROGRESSIONS, SONGS, soloShape } from './data.js';
+import { actx, ensureAudio, playString, playStroke, playNote, playBell, click, heardTime } from './audio.js';
+import { diagramSVG } from './diagram.js';
+import { chordSheetHTML, layoutSheet, tabSVG, tabX, TAB_X0 } from './sheet.js';
 import { computePose, blendPose, HAND_CFG, setPoseTable, dumpPoseTable, clearPoseCache } from './pose.js';
 import { POSE_TABLE } from './pose-table.js';
 setPoseTable(POSE_TABLE);   // 計算ずみの手の形（押した時にすぐ出るように）
@@ -19,41 +22,10 @@ const state = {root:'C', type:'', mirror:false, badges:true, ghost:true, rightMo
 const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam','pickMode','key','dia'];
 try{ const sv = JSON.parse(localStorage.getItem('ukeSettings') || '{}'); for(const k of SAVED) if(k in sv) state[k] = sv[k]; }catch(e){}
 const saveSettings = () => { try{ localStorage.setItem('ukeSettings', JSON.stringify(Object.fromEntries(SAVED.map(k=>[k, state[k]])))); }catch(e){} };
-let view = null, rig = null;
+let view = null;
 let poseFrom = null, poseTo = null, tweenStart = 0;
 let TWEEN_MS = 450, tweenDur = 450;
 
-/* =========================================================
-   縦のコード表
-   ========================================================= */
-function diagramSVG(chord){
-  const L=28, T=40, W=94, H=150, cols=4, rows=5;
-  const sx = i => L + i*W/(cols-1), sy = j => T + j*H/rows;
-  let s = `<rect width="150" height="210" rx="10" fill="#faf8f3"/>`;
-  s += `<text x="75" y="26" text-anchor="middle" font-size="24" font-weight="800" fill="#1b1410">${chord.label || chord.name}</text>`;
-  for(let j=0;j<=rows;j++) s += `<line x1="${L}" x2="${L+W}" y1="${sy(j)}" y2="${sy(j)}" stroke="#555" stroke-width="${j?1.4:5}"/>`;
-  for(let i=0;i<cols;i++){
-    s += `<line x1="${sx(i)}" x2="${sx(i)}" y1="${T}" y2="${T+H}" stroke="#333" stroke-width="1.6"/>`;
-    s += `<text x="${sx(i)}" y="${T+H+16}" text-anchor="middle" font-size="11" fill="#555">${STRING_NAMES[i]}</text>`;
-    if(chord.frets[i]===0) s += `<circle cx="${sx(i)}" cy="${T-10}" r="5" fill="none" stroke="#333" stroke-width="1.6"/>`;
-  }
-  if(chord.barre){
-    const b = chord.barre, y = (sy(b.fret-1)+sy(b.fret))/2;
-    s += `<rect x="${sx(b.from)-9}" y="${y-9}" width="${sx(b.to)-sx(b.from)+18}" height="18" rx="9" fill="${FINGER_COLORS[1]}"/>`;
-  }
-  chord.frets.forEach((fr,i)=>{
-    if(!fr) return;
-    const f = chord.fingers[i];
-    if(chord.barre && f===1 && fr===chord.barre.fret) {
-      s += `<text x="${sx(i)}" y="${(sy(fr-1)+sy(fr))/2+4.5}" text-anchor="middle" font-size="12" font-weight="800" fill="#1b1410">1</text>`;
-      return;
-    }
-    const y = (sy(fr-1)+sy(fr))/2;
-    s += `<circle cx="${sx(i)}" cy="${y}" r="9.5" fill="${FINGER_COLORS[f]}" stroke="#1b1410" stroke-width="1.2"/>`;
-    s += `<text x="${sx(i)}" y="${y+4.5}" text-anchor="middle" font-size="12" font-weight="800" fill="#1b1410">${f}</text>`;
-  });
-  return `<svg viewBox="0 0 150 210" aria-label="${chord.name}のコード表">${s}</svg>`;
-}
 /* 3D画面の左下：いまのコード（演奏中は「いま → 次 → その次」） */
 const chordCard = document.getElementById('chordCard'), svgCache = {};
 let stripKey = '';
@@ -67,52 +39,6 @@ function showStrip(names, soon=false){
   }).join('');
 }
 
-/* =========================================================
-   音（カープラス・ストロング法でウクレレっぽい音を合成）
-   ========================================================= */
-let actx = null, master = null;
-const bufCache = {};
-function ensureAudio(){
-  if(!actx){
-    actx = new (window.AudioContext||window.webkitAudioContext)();
-    master = actx.createGain(); master.gain.value = 0.7;
-    const body = actx.createBiquadFilter(); body.type='peaking'; body.frequency.value=260; body.Q.value=1.2; body.gain.value=5;
-    const lp = actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=5200;
-    master.connect(body); body.connect(lp); lp.connect(actx.destination);
-    // 弦の音（G4〜B5あたり）を、ひまな時に1つずつ先に作っておく（初めて鳴らす音で引っかからないように）
-    const notes = []; for(let m=60; m<=84; m++) notes.push(m);
-    const warm = () => { if(notes.length){ pluckBuffer(notes.shift()); setTimeout(warm, 40); } };
-    setTimeout(warm, 200);
-  }
-  if(actx.state==='suspended') actx.resume();
-}
-// 決まった乱数
-function rng(seed){ return ()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; }; }
-function pluckBuffer(midi){
-  if(bufCache[midi]) return bufCache[midi];
-  const sr = actx.sampleRate, freq = 440*Math.pow(2,(midi-69)/12);
-  const len = Math.floor(sr*2.4);
-  const N = Math.max(2, Math.round(sr/freq - 0.5));
-  const buf = actx.createBuffer(1, len, sr), y = buf.getChannelData(0);
-  const r = rng(midi*13+5);
-  let prev = 0;
-  for(let i=0;i<N;i++){ const v = r()*2-1; prev = prev*0.5 + v*0.5; y[i] = prev; }
-  const decay = 0.9965;
-  for(let i=N;i<len;i++) y[i] = decay*0.5*(y[i-N] + y[i-N-1 >= 0 ? i-N-1 : 0]);
-  // 頭のノイズを少し整える
-  let mx = 0; for(let i=0;i<len;i++) mx = Math.max(mx, Math.abs(y[i]));
-  for(let i=0;i<len;i++) y[i] /= (mx||1);
-  bufCache[midi] = buf; return buf;
-}
-function playString(si, fret, when, vol){
-  const midi = STRING_MIDI[si] + fret;
-  const src = actx.createBufferSource(); src.buffer = pluckBuffer(midi);
-  const g = actx.createGain();
-  g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(vol, when+0.004);
-  g.gain.exponentialRampToValueAtTime(0.0008, when+2.3);
-  src.connect(g); g.connect(master); src.start(when); src.stop(when+2.4);
-  const delayMs = (when-actx.currentTime)*1000;
-}
 // ボタンで1回ジャラーン：右手もダウンストロークする（指が弦を通るタイミングで音を鳴らす）
 let oneShot = null;
 const ONE_DOWN = 170, ONE_BACK = 380;
@@ -121,22 +47,6 @@ function strum(chord){
   oneShot = {start: performance.now()};
   playStroke(chord, 'D', actx.currentTime + ONE_DOWN/2000, 0.32, 0.016);
   kick();
-}
-// ダウン（4弦→1弦）／アップ（1弦→4弦）
-function playStroke(chord, dir, when, vol, gap=0.012){
-  for(let k=0;k<4;k++){ const si = dir==='D' ? k : 3-k; playString(si, chord.frets[si], when + k*gap, vol); }
-}
-function arpeggio(chord){
-  ensureAudio();
-  const t = actx.currentTime + 0.02;
-  for(let si=0; si<4; si++) playString(si, chord.frets[si], t+si*0.45, 0.4);
-}
-function click(when, accent){
-  const o = actx.createOscillator(), g = actx.createGain();
-  o.frequency.value = accent? 1500 : 1000;
-  g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(accent?0.25:0.15, when+0.002);
-  g.gain.exponentialRampToValueAtTime(0.0001, when+0.06);
-  o.connect(g); g.connect(actx.destination); o.start(when); o.stop(when+0.08);
 }
 
 /* =========================================================
@@ -269,14 +179,6 @@ function updateButtons(){
   moreBtn.classList.toggle('on', !!(T && T.more));
 }
 
-// ボタンの切り替え（ひとつだけ選べるグループ）
-function segment(id, fn){
-  const el = document.getElementById(id);
-  el.querySelectorAll('button').forEach(b=>b.onclick = ()=>{
-    el.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x===b));
-    fn(b.dataset.v); kick();
-  });
-}
 // アングル：押すたびに次の向きへ
 const ANGLES = ['diag','self','front','side','right','both'];
 let angle1 = 'diag', angle2 = 'front';
@@ -438,7 +340,7 @@ document.getElementById('camMatch').onclick = ()=>{
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick = ()=>{
   document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('on', x===b));
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id === 'tab-'+b.dataset.tab));
-  if(typeof renderTab === 'function') renderTab();      // タブ譜は「曲デモ」でソロ弾きの曲の時だけ
+  renderTab();      // タブ譜は「曲デモ」でソロ弾きの曲の時だけ
   kick();
 });
 
@@ -446,15 +348,6 @@ document.querySelectorAll('[data-tab]').forEach(b=>b.onclick = ()=>{
    音は Web Audio の時計で予約して鳴らす。画面もその時計（＋スピーカーから実際に聞こえるまでの遅れ）
    に合わせて動かすので、音と手の動きがずれない */
 const eighth = bpm => 30/(bpm*state.speed);                 // 8分音符1つの長さ（秒）
-let lastHeard = -1e9;
-function heardTime(){
-  let t;
-  const ts = actx.getOutputTimestamp ? actx.getOutputTimestamp() : null;
-  if(ts && ts.performanceTime > 0) t = ts.contextTime + (performance.now() - ts.performanceTime)/1000;
-  else t = actx.currentTime - (actx.outputLatency || actx.baseLatency || 0);
-  if(t < lastHeard) t = lastHeard;                          // 時計が戻らないように
-  return (lastHeard = t);
-}
 /* スイング：「タッ・カ・タッ・カ」の、裏の8分音符を少し遅らせる。
    u = まっすぐなリズムでの位置（8分音符単位）、warp(u) = スイングした時の時間の位置 */
 const HAND_LEAD_L = 0.12, HAND_LEAD_R = 0.04;                 // 手を音より先に動かす秒数
@@ -586,7 +479,7 @@ function stopProg(){
 document.getElementById('btnProg').onclick = ()=> prog.running ? stopProg() : startProg();
 
 /* ---------- 演奏デモ（曲） ---------- */
-const song = {idx:0, running:false, timer:null, t0:0, e8:0.3, nextSlot:0, mel:0, notes:[], melodyOn:true, accompOn:true, hl:null, st0:0, sel:null, hn:null};
+const song = {idx:0, running:false, timer:null, t0:0, e8:0.3, nextSlot:0, mel:0, notes:[], melodyOn:true, accompOn:true, hl:null, st0:0, selBeat:null, hn:null};
 const SONG = () => SONGS[song.idx];
 const songList = document.getElementById('songList'), songSheet = document.getElementById('songSheet');
 SONGS.forEach((sg,i)=>{
@@ -614,30 +507,12 @@ function renderSong(){
   const bm = document.getElementById('btnMelody');
   bm.style.display = (sg.melody || sg.score || sg.accomp || sg.melodyNotes) ? '' : 'none';
   bm.textContent = sg.accomp ? '伴奏' : 'メロディ'; bm.classList.toggle('on', sg.accomp ? song.accompOn : song.melodyOn);
-  // ソロ弾きは、小節ごとに弾く音（弦・フレット）を並べる
-  // 音はドレミで、下に小さく弦とフレット（「E3」＝E弦の3フレット、「A0」＝A弦の開放）。押すとその音が鳴り、そこから演奏できる
-  song.sel = null; song.selBeat = null; song.hn = null;
+  song.selBeat = null; song.hn = null;
   if(!song.running) document.getElementById('btnSong').textContent = '▶ 演奏する';
-  songSheet.classList.toggle('solo', !!sg.solo); songSheet.classList.toggle('flow', !sg.solo);
-  songSheet.hidden = !!sg.solo;          // ソロ弾きは、3D画面の下のタブ譜で見る（この楽譜は隠すだけ。タブ譜の数字を押した時に使う）
-  songSheet.innerHTML = sg.solo
-    ? sg.bars.map((b,i)=>`<div class="bar solo">${sg.accomp && sg.accomp[i] ? `<em>${sg.accomp[i][0]}</em>` : ''}${sg.solo.map((n,j)=>[n,j]).filter(([n])=>Math.floor(n[0]/sg.beats)===i).map(([n,j])=>`<button class="nt" data-i="${j}" title="${STRING_NAMES[n[2]]}弦 ${n[3] ? n[3]+'フレット' : '開放'}（押すと鳴らす・ここから演奏）"><b>${doremi(STRING_MIDI[n[2]]+n[3])}</b><small>${STRING_NAMES[n[2]]}${n[3]}</small></button>`).join('') || '<span class="rest">𝄽</span>'}</div>`).join('')
-    // コード弾き：小節を1行に流して並べる。コードを押すと鳴らして左手がその形に、そこから演奏できる
-    : sg.bars.map((b,i)=>{ let off = 0;
-        return `<div class="bar fl">${sg.silentBars?.has(i)
-          ? `<button class="cb muted" data-beat="${sg.startBeat ?? i*sg.beats}" title="アウフタクト（メロディだけ）">♪</button>`
-          : b.map(([c,n])=>{ const beat = i*sg.beats + off; off += n;
-              return `<button class="cb" data-beat="${beat}" data-c="${c}" title="押すと鳴らす・ここから演奏">${c}${sg.onceBars?.has(i) ? '<small>1拍</small>' : ''}</button>`; }).join('')}</div>`; }).join('');
-  // きれいにそろえる：1行にコード弾きは8小節・ソロ弾きは4小節。アウフタクト（1小節目が弾き出しだけ）の曲は、
-  // その小節を左の細い列に置いて、2小節目から行の頭がそろうようにする
-  const per = sg.solo ? 4 : 8, pick = sg.silentBars?.has(0) || !!(sg.solo && sg.startBeat);
-  songSheet.style.gridTemplateColumns = (pick ? 'auto ' : '') + `repeat(${per}, minmax(0,1fr))`;
-  songSheet.querySelectorAll('.bar').forEach((el,i)=>{
-    const j = pick ? i-1 : i;
-    if(pick && i === 0){ el.style.gridRow = '1'; el.style.gridColumn = '1'; el.classList.add('pick'); return; }
-    el.style.gridRow = String(Math.floor(j/per) + 1); el.style.gridColumn = String(j%per + 1 + (pick ? 1 : 0));
-    el.classList.toggle('phrase', j % 4 === 0);
-  });
+  // コード弾きは、押せるコードの表。ソロ弾きは、3D画面の下のタブ譜で見る（この表は出さない）
+  songSheet.hidden = !!sg.solo;
+  songSheet.innerHTML = sg.solo ? '' : chordSheetHTML(sg);
+  if(!sg.solo) layoutSheet(songSheet, sg);
   song.hl = null; highlightSong(-1);
   renderTab();
 }
@@ -650,36 +525,6 @@ function chordAt(sg, k){
   let acc = 0;
   for(const [c, n] of sg.bars[bar]){ if(beat < acc + n) return c; acc += n; }
   return sg.bars[bar][sg.bars[bar].length-1][0];
-}
-// オルゴールのような音（チンと鳴って、ゆっくり消える）
-function playBell(midi, when){
-  const f = 440*Math.pow(2,(midi-69)/12), g = actx.createGain();
-  g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(0.06, when+0.005);
-  g.gain.exponentialRampToValueAtTime(0.0001, when+1.6);
-  for(const [mult, v] of [[1,1],[3.01,0.18],[5.2,0.05]]){
-    const o = actx.createOscillator(), og = actx.createGain(); o.type = 'sine'; o.frequency.value = f*mult; og.gain.value = v;
-    o.connect(og); og.connect(g); o.start(when); o.stop(when+1.7);
-  }
-  g.connect(actx.destination);
-}
-function playNote(midi, when, dur){
-  const f = 440*Math.pow(2,(midi-69)/12);
-  const g = actx.createGain(), lp = actx.createBiquadFilter();
-  lp.type = 'lowpass'; lp.frequency.value = 2600;
-  g.gain.setValueAtTime(0.0001, when);
-  g.gain.exponentialRampToValueAtTime(0.11, when+0.03);
-  g.gain.exponentialRampToValueAtTime(0.07, when+0.15);
-  g.gain.setValueAtTime(0.07, when+Math.max(0.16, dur-0.08));
-  g.gain.exponentialRampToValueAtTime(0.0001, when+dur+0.05);
-  for(const [type, mult, v] of [['triangle',1,1],['sine',2,0.25]]){
-    const o = actx.createOscillator(), og = actx.createGain();
-    o.type = type; o.frequency.value = f*mult; og.gain.value = v;
-    // ほんの少しビブラート
-    const lfo = actx.createOscillator(), lg = actx.createGain(); lfo.frequency.value = 5.2; lg.gain.value = f*mult*0.004;
-    lfo.connect(lg); lg.connect(o.frequency); lfo.start(when); lfo.stop(when+dur+0.1);
-    o.connect(og); og.connect(g); o.start(when); o.stop(when+dur+0.1);
-  }
-  g.connect(lp); lp.connect(actx.destination);
 }
 function tickSong(){
   if(!song.running || song.running === 'ending') return;
@@ -707,27 +552,28 @@ function tickSong(){
       song.running = 'ending';
       return;
     }
-    if(sg.solo){                                 // ソロ弾き：音の出だしで、その弦だけをはじく
-      // 伴奏：その小節のコードを、伴奏のリズム（accompPattern）で小さく（「1拍」の小節は1拍目だけ）
-      const ac = sg.accomp && sg.accomp[Math.floor(k/spb)], sl = k % spb;
-      if(ac && song.accompOn){
-        const st = ac[1] < sg.beats ? (sl === 0 ? 'D' : '-') : (sg.accompPattern || 'D-D-D-D-')[sl];
-        if(st === 'D') playStroke(getChord(ac[0]), 'D', when, sl === 0 ? 0.11 : 0.085, 0.018);
-        if(st === 'U') playStroke(getChord(ac[0]), 'U', when, 0.06, 0.015);
-      }
-      if(sg.pattern[k] === 'D'){
-        const n = sg.solo.find(x => Math.round(x[0]*2) === k); if(n) playString(n[2], n[3], when, 0.42); }
-      continue;
-    }
-    const slot = k % spb, bar = Math.floor(k/spb), last = bar === sg.bars.length-1;
-    const c = chordAt(sg, k);
-    let st = last ? (slot===0 ? 'D' : '-') : sg.pattern[slot];
-    if(sg.silentBars?.has(bar)) st = '-';                                // 弾かない小節（アウフタクト）
-    else if(sg.onceBars?.has(bar)) st = slot===0 ? 'D' : '-';            // 1拍目だけ弾く小節
-    const chord = getChord(c);
-    if(st==='D') playStroke(chord, 'D', when, slot===0 ? 0.30 : 0.24);
-    if(st==='U') playStroke(chord, 'U', when, 0.15);
+    if(sg.solo) tickSoloSlot(sg, k, when); else tickChordSlot(sg, k, when);
   }
+}
+// ソロ弾き：小さな伴奏（伴奏のリズム accompPattern。「1拍」の小節は1拍目だけ）と、音の出だしでその弦だけをはじく
+function tickSoloSlot(sg, k, when){
+  const spb = sg.beats*2, ac = sg.accomp && sg.accomp[Math.floor(k/spb)], sl = k % spb;
+  if(ac && song.accompOn){
+    const st = ac[1] < sg.beats ? (sl === 0 ? 'D' : '-') : (sg.accompPattern || 'D-D-D-D-')[sl];
+    if(st === 'D') playStroke(getChord(ac[0]), 'D', when, sl === 0 ? 0.11 : 0.085, 0.018);
+    if(st === 'U') playStroke(getChord(ac[0]), 'U', when, 0.06, 0.015);
+  }
+  if(sg.pattern[k] === 'D'){ const n = sg.solo.find(x => Math.round(x[0]*2) === k); if(n) playString(n[2], n[3], when, 0.42); }
+}
+// コード弾き：ストロークのパターンどおりに（最後の小節は1回だけ。アウフタクトの小節は弾かない、「1拍」の小節は1拍目だけ）
+function tickChordSlot(sg, k, when){
+  const spb = sg.beats*2, slot = k % spb, bar = Math.floor(k/spb), last = bar === sg.bars.length-1;
+  let st = last ? (slot===0 ? 'D' : '-') : sg.pattern[slot];
+  if(sg.silentBars?.has(bar)) st = '-';
+  else if(sg.onceBars?.has(bar)) st = slot===0 ? 'D' : '-';
+  const chord = getChord(chordAt(sg, k));
+  if(st==='D') playStroke(chord, 'D', when, slot===0 ? 0.30 : 0.24);
+  if(st==='U') playStroke(chord, 'U', when, 0.15);
 }
 function startSong(fromBeat=null){
   ensureAudio(); stopProg();
@@ -763,64 +609,37 @@ function stopSong(){
   updateFs();
 }
 document.getElementById('btnSong').onclick = ()=> song.running ? stopSong() : startSong(song.selBeat);
-// ソロ弾きの楽譜：音を押すと、その音を鳴らして左手がその形に。演奏中なら、その音から弾き直す（止まっている時は ▶ でその音から）
+// コード弾きの楽譜：コードを押すと鳴らして左手がその形に。演奏中なら、そこから弾き直す（止まっている時は ▶ でそこから）
 songSheet.addEventListener('click', e=>{
-  // コード弾きの曲：コードを押すと鳴らして左手がその形に。演奏中なら、そこから弾き直す
-  const cb = e.target.closest('.cb');
-  if(cb){
-    const beat = +cb.dataset.beat; ensureAudio();
-    song.selBeat = beat;
-    songSheet.querySelectorAll('.cb').forEach(x=>x.classList.toggle('sel', x===cb));
-    if(song.running){ stopSong(); startSong(beat); return; }
-    if(cb.dataset.c){ setChord(cb.dataset.c); strum(getChord(cb.dataset.c)); }
-    document.getElementById('btnSong').textContent = '▶ ここから演奏';
-    return;
-  }
-  const b = e.target.closest('.nt'); if(!b) return;
-  const sg = SONG(), i = +b.dataset.i, n = sg.solo[i];
+  const cb = e.target.closest('.cb'); if(!cb) return;
+  const beat = +cb.dataset.beat; ensureAudio();
+  song.selBeat = beat;
+  songSheet.querySelectorAll('.cb').forEach(x=>x.classList.toggle('sel', x===cb));
+  if(song.running){ stopSong(); startSong(beat); return; }
+  if(cb.dataset.c){ setChord(cb.dataset.c); strum(getChord(cb.dataset.c)); }
+  document.getElementById('btnSong').textContent = '▶ ここから演奏';
+});
+/* ソロ弾きのタブ譜（3D画面の下）。「曲デモ」でソロ弾きの曲の時だけ出す */
+const tabStrip = document.getElementById('tabStrip'), tabScroll = document.getElementById('tabScroll');
+function renderTab(){
+  const sg = SONG(), show = !!sg.solo && activeTab() === 'songs';
+  tabStrip.hidden = !show;
+  tabScroll.innerHTML = show ? tabSVG(sg) : '';
+  tabScroll.scrollLeft = 0;
+}
+// タブ譜の音を押した時：その音を鳴らして左手がその形に。演奏中なら、その音から弾き直す（止まっている時は ▶ でその音から）
+function selectSoloNote(i){
+  const n = SONG().solo[i];
   ensureAudio();
-  song.sel = i; song.selBeat = n[0];
-  songSheet.querySelectorAll('.nt').forEach(x=>x.classList.toggle('sel', x===b));
+  song.selBeat = n[0];
   tabScroll.querySelectorAll('.tn').forEach(x=>x.classList.toggle('sel', +x.dataset.i === i));
-  if(!song.running) tabScroll.scrollTo({left: Math.max(0, tabX(n[0]) - TAB_X0 - 40), behavior:'smooth'});
   if(song.running){ stopSong(); startSong(n[0]); return; }
+  tabScroll.scrollTo({left: Math.max(0, tabX(n[0]) - TAB_X0 - 40), behavior:'smooth'});
   playString(n[2], n[3], actx.currentTime + 0.02, 0.45);
   setChord(soloShape(n[2], n[3]));
   document.getElementById('btnSong').textContent = '▶ ここから演奏';
-});
-/* ソロ弾きのタブ譜：上から A・E・C・G 弦の4本線に、押さえるフレットの数字。上にコード名、下にドレミ。
-   横にスクロールでき、数字を押すと楽譜の音を押した時と同じ（鳴らす・そこから演奏） */
-const tabStrip = document.getElementById('tabStrip'), tabScroll = document.getElementById('tabScroll');
-const TAB_PPB = 34, TAB_X0 = 72, TAB_LINE = [26, 38, 50, 62];      // 1拍の幅・最初の位置・弦の線の高さ（A E C G の順）
-const tabX = beat => TAB_X0 + beat*TAB_PPB;
-function renderTab(){
-  const sg = SONG();
-  const show = !!sg.solo && activeTab() === 'songs';
-  tabStrip.hidden = !show;
-  if(!show){ tabScroll.innerHTML = ''; return; }
-  const beats = sg.soloBars*sg.beats, W = tabX(beats) + 260, ly = si => TAB_LINE[3-si];
-  let s = `<svg width="${W}" height="92" viewBox="0 0 ${W} 92" xmlns="http://www.w3.org/2000/svg">`;
-  ['A','E','C','G'].forEach((n,i)=>{ s += `<line x1="${TAB_X0-14}" x2="${tabX(beats)}" y1="${TAB_LINE[i]}" y2="${TAB_LINE[i]}" stroke="#9a8f84" stroke-width="1"/>`;
-    s += `<text x="${TAB_X0-24}" y="${TAB_LINE[i]+4}" font-size="10" fill="#8a7f74" text-anchor="middle">${n}</text>`; });
-  s += `<text x="${TAB_X0-40}" y="48" font-size="12" font-weight="800" fill="#8a7f74" text-anchor="middle" transform="rotate(-90 ${TAB_X0-40} 44)">TAB</text>`;
-  for(let i=0; i<=sg.soloBars; i++){
-    const x = tabX(i*sg.beats) - (i ? 6 : 14);
-    s += `<line x1="${x}" x2="${x}" y1="${TAB_LINE[0]}" y2="${TAB_LINE[3]}" stroke="#6b6158" stroke-width="${i===sg.soloBars ? 2.5 : 1}"/>`;
-    const ac = sg.accomp && sg.accomp[i];
-    if(ac && i < sg.soloBars) s += `<text x="${x+4}" y="13" font-size="11" font-weight="800" fill="#13a89e">${ac[0]}</text>`;
-  }
-  sg.solo.forEach(([b, len, si, f], j)=>{
-    const x = tabX(b), y = ly(si), w = String(f).length*8 + 6;
-    s += `<g class="tn" data-i="${j}"><rect x="${x-w/2}" y="${y-8}" width="${w}" height="16" rx="4"/><text x="${x}" y="${y+4.5}" text-anchor="middle">${f}</text></g>`;
-    s += `<text x="${x}" y="84" font-size="10" fill="#6b6158" text-anchor="middle">${doremi(STRING_MIDI[si]+f)}</text>`;
-  });
-  tabScroll.innerHTML = s + '</svg>';
-  tabScroll.scrollLeft = 0;
 }
-tabScroll.addEventListener('click', e=>{
-  const g = e.target.closest('.tn'); if(!g) return;
-  songSheet.querySelector(`.nt[data-i="${g.dataset.i}"]`)?.click();     // 楽譜の音を押したのと同じ
-});
+tabScroll.addEventListener('click', e=>{ const g = e.target.closest('.tn'); if(g) selectSoloNote(+g.dataset.i); });
 // 演奏中：今の位置（拍）が左の線に来るようにスクロール
 function scrollTab(beat){ if(!tabStrip.hidden) tabScroll.scrollLeft = Math.max(0, tabX(beat) - TAB_X0); }
 // 演奏中は、いま弾いている音を光らせる
@@ -828,7 +647,6 @@ function highlightNote(ph){
   const sg = SONG(); if(!sg.solo) return;
   let i = -1; if(ph >= 0) for(let j=0;j<sg.solo.length;j++){ if(sg.solo[j][0]*2 <= ph + 0.01) i = j; else break; }
   if(i === song.hn) return; song.hn = i;
-  songSheet.querySelectorAll('.nt').forEach(x=>x.classList.toggle('now', +x.dataset.i === i));
   tabScroll.querySelectorAll('.tn').forEach(x=>x.classList.toggle('now', +x.dataset.i === i));
 }
 renderSong();
