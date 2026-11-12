@@ -280,6 +280,14 @@
   .song-sheet .bar .nt.now{background:var(--accent);color:#fff}
   .song-sheet .bar .nt.now small{color:#fff}
   .song-sheet .bar.solo.now{background:none;color:inherit;border-color:var(--line)}
+  /* コード弾きの楽譜：小節を1行に流して並べる（区切りは縦線）。コードは押せる */
+  .song-sheet.flow{display:flex;flex-wrap:wrap;row-gap:4px;gap:0}
+  .song-sheet .bar.fl{display:flex;gap:2px;padding:0 3px;border:0;border-left:1px solid var(--line);border-radius:0;background:none}
+  .song-sheet .bar .cb{padding:3px 6px;min-width:30px;border-radius:6px;font-size:13px;font-weight:800;line-height:1.1}
+  .song-sheet .bar .cb small{font-size:9px;font-weight:400;margin-left:1px;opacity:.75}
+  .song-sheet .bar .cb.sel{border-color:var(--accent)}
+  .song-sheet .bar.fl.now{background:none;border-color:var(--line)}
+  .song-sheet .bar.fl.now .cb{background:var(--on);color:#fff;border-color:var(--on)}
   .song-sheet .bar.now{background:var(--on);color:#fff;border-color:var(--on)}
   .song-sheet .bar.now span+span{color:#d6f3f1}
   #songList{display:flex;gap:4px;flex-wrap:wrap}

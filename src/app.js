@@ -615,13 +615,17 @@ function renderSong(){
   bm.textContent = sg.accomp ? '伴奏' : 'メロディ'; bm.classList.toggle('on', sg.accomp ? song.accompOn : song.melodyOn);
   // ソロ弾きは、小節ごとに弾く音（弦・フレット）を並べる
   // 音はドレミで、下に小さく弦とフレット（「E3」＝E弦の3フレット、「A0」＝A弦の開放）。押すとその音が鳴り、そこから演奏できる
-  song.sel = null; song.hn = null;
+  song.sel = null; song.selBeat = null; song.hn = null;
   if(!song.running) document.getElementById('btnSong').textContent = '▶ 演奏する';
-  songSheet.classList.toggle('solo', !!sg.solo);
+  songSheet.classList.toggle('solo', !!sg.solo); songSheet.classList.toggle('flow', !sg.solo);
   songSheet.innerHTML = sg.solo
     ? sg.bars.map((b,i)=>`<div class="bar solo">${sg.accomp && sg.accomp[i] ? `<em>${sg.accomp[i][0]}</em>` : ''}${sg.solo.map((n,j)=>[n,j]).filter(([n])=>Math.floor(n[0]/sg.beats)===i).map(([n,j])=>`<button class="nt" data-i="${j}" title="${STRING_NAMES[n[2]]}弦 ${n[3] ? n[3]+'フレット' : '開放'}（押すと鳴らす・ここから演奏）"><b>${doremi(STRING_MIDI[n[2]]+n[3])}</b><small>${STRING_NAMES[n[2]]}${n[3]}</small></button>`).join('') || '<span class="rest">𝄽</span>'}</div>`).join('')
-    : sg.bars.map((b,i)=>`<div class="bar">${sg.silentBars?.has(i) ? '<span class="muted">♪</span>'          // アウフタクト（メロディだけ）
-        : b.map(c=>`<span>${c[0]}${sg.onceBars?.has(i) ? '<small>（1拍）</small>' : ''}</span>`).join('')}</div>`).join('');
+    // コード弾き：小節を1行に流して並べる。コードを押すと鳴らして左手がその形に、そこから演奏できる
+    : sg.bars.map((b,i)=>{ let off = 0;
+        return `<div class="bar fl">${sg.silentBars?.has(i)
+          ? `<button class="cb muted" data-beat="${sg.startBeat ?? i*sg.beats}" title="アウフタクト（メロディだけ）">♪</button>`
+          : b.map(([c,n])=>{ const beat = i*sg.beats + off; off += n;
+              return `<button class="cb" data-beat="${beat}" data-c="${c}" title="押すと鳴らす・ここから演奏">${c}${sg.onceBars?.has(i) ? '<small>1拍</small>' : ''}</button>`; }).join('')}</div>`; }).join('');
   song.hl = null; highlightSong(-1);
 }
 function highlightSong(bar){
@@ -729,6 +733,8 @@ function startSong(fromBeat=null){
   if(sg.melody) for(const [midi, len] of sg.melody){ song.notes.push({midi, beat:b, len}); b += len; }
   if(sg.melodyNotes) song.notes.push(...sg.melodyNotes);
   if(sg.score){ for(const [midi, beat] of sg.score) song.notes.push({midi, beat, len:1, bell:true}); song.notes.sort((x,y)=>x.beat-y.beat); }
+  // 途中から始める時は、それより前のメロディは鳴らさない
+  while(song.mel < song.notes.length && song.notes[song.mel].beat < st0/2 - 1e-6) song.mel++;
   song.running = true;
   setChord(chordAt(sg, Math.max(0, st0)));
   document.getElementById('btnSong').textContent = '■ ストップ';
@@ -740,16 +746,27 @@ function stopSong(){
   song.running = false; clearInterval(song.timer);
   document.getElementById('btnSong').textContent = '▶ 演奏する';
   highlightSong(-1); highlightNote(-1); if(SONG().solo) setChord(chordName(), false); showStrip([chordName()]); kick();
-  if(song.sel != null && SONG().solo) document.getElementById('btnSong').textContent = '▶ ここから演奏';
+  if(song.selBeat != null) document.getElementById('btnSong').textContent = '▶ ここから演奏';
   updateFs();
 }
-document.getElementById('btnSong').onclick = ()=> song.running ? stopSong() : startSong(song.sel != null && SONG().solo ? SONG().solo[song.sel][0] : null);
+document.getElementById('btnSong').onclick = ()=> song.running ? stopSong() : startSong(song.selBeat);
 // ソロ弾きの楽譜：音を押すと、その音を鳴らして左手がその形に。演奏中なら、その音から弾き直す（止まっている時は ▶ でその音から）
 songSheet.addEventListener('click', e=>{
+  // コード弾きの曲：コードを押すと鳴らして左手がその形に。演奏中なら、そこから弾き直す
+  const cb = e.target.closest('.cb');
+  if(cb){
+    const beat = +cb.dataset.beat; ensureAudio();
+    song.selBeat = beat;
+    songSheet.querySelectorAll('.cb').forEach(x=>x.classList.toggle('sel', x===cb));
+    if(song.running){ stopSong(); startSong(beat); return; }
+    if(cb.dataset.c){ setChord(cb.dataset.c); strum(getChord(cb.dataset.c)); }
+    document.getElementById('btnSong').textContent = '▶ ここから演奏';
+    return;
+  }
   const b = e.target.closest('.nt'); if(!b) return;
   const sg = SONG(), i = +b.dataset.i, n = sg.solo[i];
   ensureAudio();
-  song.sel = i;
+  song.sel = i; song.selBeat = n[0];
   songSheet.querySelectorAll('.nt').forEach(x=>x.classList.toggle('sel', x===b));
   if(song.running){ stopSong(); startSong(n[0]); return; }
   playString(n[2], n[3], actx.currentTime + 0.02, 0.45);
