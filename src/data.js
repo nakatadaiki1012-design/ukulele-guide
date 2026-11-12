@@ -71,12 +71,15 @@ Object.assign(CHORDS, {
 // 手で書いた押さえ方があればそれを、なければ自動でさがした押さえ方を使う（chordgen.js）
 /* ソロ弾き用の「1音だけ押さえる形」。名前は solo:弦:フレット（弦 0=G 1=C 2=E 3=A）
    指は1フレット＝人差し指、2＝中指、3＝薬指、4＝小指（ローポジションの基本） */
+// 音の高さ（MIDI番号）→ ドレミ
+const DOREMI = ['ド','ド♯','レ','レ♯','ミ','ファ','ファ♯','ソ','ソ♯','ラ','ラ♯','シ'];
+export const doremi = midi => DOREMI[midi % 12];
 export function soloShape(si, fret){ return `solo:${si}:${fret}`; }
 function getSolo(name){
   const m = name.match(/^solo:(\d):(\d+)$/); if(!m) return null;
   const si = +m[1], f = +m[2], frets = [0,0,0,0], fingers = [0,0,0,0];
   frets[si] = f; if(f) fingers[si] = Math.min(4, f);
-  return {name, frets, fingers, barre:null, solo:true, label: `${STRING_NAMES[si]}弦 ${f ? f : '開放'}`};
+  return {name, frets, fingers, barre:null, solo:true, label: doremi(STRING_MIDI[si] + f), sub: `${STRING_NAMES[si]}弦 ${f ? f+'フレット' : '開放'}`};
 }
 export function getChord(name){
   if(name.startsWith('solo:')) return getSolo(name);
