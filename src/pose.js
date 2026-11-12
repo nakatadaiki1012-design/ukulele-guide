@@ -455,6 +455,7 @@ export function dumpPoseTable(){
 }
 export const clearPoseCache = () => poseCache.clear();
 
+const SOLO_CENTER = 42;   // ソロ弾きの時の見る中心（ナット〜4フレットのまん中あたり）
 export function computePose(chord, rig){
   const t0 = performance.now();
   let hb = poseCache.get(chord.name);
@@ -498,7 +499,10 @@ export function computePose(chord, rig){
   const xs = Object.values(tipX);
   const center = xs.length ? (Math.min(...xs)+Math.max(...xs))/2 : fretX(1.5);
   window.__thumbInfo = {ang: th.ang, cost: th.cost, total: hb.cost, prm: hb.prm, parts: hb.parts, ms: performance.now()-t0};
-  return {joints, fingers, str, chord, target:[Math.min(Math.max(center,30),80), 10, -4]};
+  // 見る中心（カメラが追いかける所）。ソロ弾きは1〜4フレットの中を音ごとに行き来するので、
+  // 中心を固定して、カメラが左右に動かないようにする（その範囲は動かさなくても全部見える）
+  const cx = chord.solo ? SOLO_CENTER : Math.min(Math.max(center,30),80);
+  return {joints, fingers, str, chord, target:[cx, 10, -4]};
 }
 
 /* ---------- コードチェンジのアニメーション ---------- */

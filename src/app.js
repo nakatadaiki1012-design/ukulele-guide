@@ -619,6 +619,7 @@ function renderSong(){
   song.sel = null; song.selBeat = null; song.hn = null;
   if(!song.running) document.getElementById('btnSong').textContent = '▶ 演奏する';
   songSheet.classList.toggle('solo', !!sg.solo); songSheet.classList.toggle('flow', !sg.solo);
+  songSheet.hidden = !!sg.solo;          // ソロ弾きは、3D画面の下のタブ譜で見る（この楽譜は隠すだけ。タブ譜の数字を押した時に使う）
   songSheet.innerHTML = sg.solo
     ? sg.bars.map((b,i)=>`<div class="bar solo">${sg.accomp && sg.accomp[i] ? `<em>${sg.accomp[i][0]}</em>` : ''}${sg.solo.map((n,j)=>[n,j]).filter(([n])=>Math.floor(n[0]/sg.beats)===i).map(([n,j])=>`<button class="nt" data-i="${j}" title="${STRING_NAMES[n[2]]}弦 ${n[3] ? n[3]+'フレット' : '開放'}（押すと鳴らす・ここから演奏）"><b>${doremi(STRING_MIDI[n[2]]+n[3])}</b><small>${STRING_NAMES[n[2]]}${n[3]}</small></button>`).join('') || '<span class="rest">𝄽</span>'}</div>`).join('')
     // コード弾き：小節を1行に流して並べる。コードを押すと鳴らして左手がその形に、そこから演奏できる

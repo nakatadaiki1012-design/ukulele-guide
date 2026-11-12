@@ -313,7 +313,10 @@
   @media (min-width:420px){ .song-sheet .bar .cb small{display:inline} }
   .song-sheet .bar.now{background:var(--on);color:#fff;border-color:var(--on)}
   .song-sheet .bar.now span+span{color:#d6f3f1}
-  #songList{display:flex;gap:4px;flex-wrap:wrap}
+  #songList{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
+  .runbar.top{margin:0 0 10px}
+  .song-sheet[hidden]{display:none}
+  #tab-songs .song-info{margin-top:8px}
   footer{max-width:1400px;margin:0 auto;padding:0 16px 20px;color:var(--dim);font-size:11px}
 </style>
 </head>
@@ -412,16 +415,17 @@
       </div>
 
       <div class="tab" id="tab-songs">
-        <div id="songList"></div>
-        <div class="song-info" id="songInfo"></div>
-        <div class="song-sheet" id="songSheet"></div>
-        <div class="runbar">
+        <!-- よく使う順に：演奏ボタン → コード進行（押せる） → 曲えらび → 曲の説明 -->
+        <div class="runbar top">
           <button class="play big" id="btnSong">▶ 演奏する</button>
           <button id="btnMelody" class="chip on">メロディ</button>
           <button class="chip swingBtn" title="裏拍を少し遅らせて「タッカ・タッカ」とはずませる">スイング</button>
           <button class="chip speedBtn" title="押すたびに ×1 → ×¾ → ×½ → ×¼（スロー再生）">速さ ×1</button>
           <span class="tempo">テンポ <input type="range" id="songBpm" min="50" max="140" value="100"> <span id="songBpmVal">100</span></span>
         </div>
+        <div class="song-sheet" id="songSheet"></div>
+        <div id="songList"></div>
+        <div class="song-info" id="songInfo"></div>
         <p class="cap">1小節カウントしてから始まります。アングルを「両手」にすると両手の動きが見やすくなります。Slow & Easy はコード進行と伴奏だけ（メロディは著作権があるので入れていません）。ほかの曲は著作権の切れた曲です。</p>
       </div>
     </section>
