@@ -617,8 +617,9 @@ function renderSong(){
   // 音はドレミで、下に小さく弦とフレット（「E3」＝E弦の3フレット、「A0」＝A弦の開放）。押すとその音が鳴り、そこから演奏できる
   song.sel = null; song.hn = null;
   if(!song.running) document.getElementById('btnSong').textContent = '▶ 演奏する';
+  songSheet.classList.toggle('solo', !!sg.solo);
   songSheet.innerHTML = sg.solo
-    ? sg.bars.map((b,i)=>`<div class="bar solo">${sg.accomp && sg.accomp[i] ? `<em>${sg.accomp[i][0]}</em>` : ''}${sg.solo.map((n,j)=>[n,j]).filter(([n])=>Math.floor(n[0]/sg.beats)===i).map(([n,j])=>`<button class="nt" data-i="${j}" title="${STRING_NAMES[n[2]]}弦 ${n[3] ? n[3]+'フレット' : '開放'}（押すと鳴らす・ここから演奏）"><b>${doremi(STRING_MIDI[n[2]]+n[3])}</b><small>${STRING_NAMES[n[2]]}${n[3]}</small></button>`).join('') || '<span>・</span>'}</div>`).join('')
+    ? sg.bars.map((b,i)=>`<div class="bar solo">${sg.accomp && sg.accomp[i] ? `<em>${sg.accomp[i][0]}</em>` : ''}${sg.solo.map((n,j)=>[n,j]).filter(([n])=>Math.floor(n[0]/sg.beats)===i).map(([n,j])=>`<button class="nt" data-i="${j}" title="${STRING_NAMES[n[2]]}弦 ${n[3] ? n[3]+'フレット' : '開放'}（押すと鳴らす・ここから演奏）"><b>${doremi(STRING_MIDI[n[2]]+n[3])}</b><small>${STRING_NAMES[n[2]]}${n[3]}</small></button>`).join('') || '<span class="rest">𝄽</span>'}</div>`).join('')
     : sg.bars.map(b=>`<div class="bar">${b.map(c=>`<span>${c[0]}</span>`).join('')}</div>`).join('');
   song.hl = null; highlightSong(-1);
 }

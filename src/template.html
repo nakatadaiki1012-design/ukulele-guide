@@ -269,17 +269,17 @@
   .song-sheet{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
   .song-sheet .bar{display:flex;gap:6px;justify-content:center;padding:6px 2px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);font-weight:800;font-size:14px}
   .song-sheet .bar span+span{color:var(--sub)}
-  .song-sheet .bar.solo{gap:4px;font-size:12px;flex-wrap:wrap}
-  .song-sheet .bar.solo span+span{color:inherit}
-  .song-sheet .bar .nt{padding:1px 3px;min-width:0;border-radius:6px;font-weight:800;font-size:12px;line-height:1.1;background:none;border:1px solid transparent;color:inherit}
-  .song-sheet .bar .nt small{display:block;font-size:9px;font-weight:400;color:var(--sub)}
+  /* ソロ弾きの楽譜：小節を箱にせず、1行に流して並べる（小節の区切りは縦線）。コード名は小節の頭に小さく */
+  .song-sheet.solo{display:flex;flex-wrap:wrap;row-gap:3px;gap:0}
+  .song-sheet .bar.solo{display:flex;align-items:flex-end;gap:0;padding:0 3px;border:0;border-left:1px solid var(--line);border-radius:0;background:none;font-size:12px;font-weight:800}
+  .song-sheet .bar.solo em{font-style:normal;font-size:9px;color:var(--accent);align-self:flex-start;margin-right:1px;line-height:1}
+  .song-sheet .bar .nt{padding:1px 2px;min-width:0;border-radius:5px;font-weight:800;font-size:12px;line-height:1.05;background:none;border:1px solid transparent;color:inherit;flex:0 0 auto}
+  .song-sheet .bar .nt small{display:block;font-size:8px;font-weight:400;color:var(--sub)}
   .song-sheet .bar .nt:hover{border-color:var(--accent)}
-  .song-sheet .bar .nt.sel{border-color:var(--accent);background:#fff3}
+  .song-sheet .bar .nt.sel{border-color:var(--accent)}
   .song-sheet .bar .nt.now{background:var(--accent);color:#fff}
   .song-sheet .bar .nt.now small{color:#fff}
-  .song-sheet .bar.solo.now{background:var(--panel2);border-color:var(--accent);color:inherit;box-shadow:inset 0 0 0 1px var(--accent)}
-  .song-sheet .bar.solo{column-gap:2px;row-gap:0;padding:4px 2px}
-  .song-sheet .bar.solo em{flex-basis:100%;font-style:normal;font-size:10px;color:var(--accent);line-height:1}
+  .song-sheet .bar.solo.now{background:none;color:inherit;border-color:var(--line)}
   .song-sheet .bar.now{background:var(--on);color:#fff;border-color:var(--on)}
   .song-sheet .bar.now span+span{color:#d6f3f1}
   #songList{display:flex;gap:4px;flex-wrap:wrap}
