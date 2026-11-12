@@ -30,7 +30,7 @@ function diagramSVG(chord){
   const L=28, T=40, W=94, H=150, cols=4, rows=5;
   const sx = i => L + i*W/(cols-1), sy = j => T + j*H/rows;
   let s = `<rect width="150" height="210" rx="10" fill="#faf8f3"/>`;
-  s += `<text x="75" y="26" text-anchor="middle" font-size="24" font-weight="800" fill="#1b1410">${chord.name}</text>`;
+  s += `<text x="75" y="26" text-anchor="middle" font-size="24" font-weight="800" fill="#1b1410">${chord.label || chord.name}</text>`;
   for(let j=0;j<=rows;j++) s += `<line x1="${L}" x2="${L+W}" y1="${sy(j)}" y2="${sy(j)}" stroke="#555" stroke-width="${j?1.4:5}"/>`;
   for(let i=0;i<cols;i++){
     s += `<line x1="${sx(i)}" x2="${sx(i)}" y1="${T}" y2="${T+H}" stroke="#333" stroke-width="1.6"/>`;
@@ -146,11 +146,16 @@ const chordName = () => state.root + state.type;
 function setChord(name, animate=true){
   const chord = getChord(name);
   if(!chord) return;
+  if(chord.solo){                                   // ソロ弾きの1音（弦とフレット）
+    document.getElementById('chordName').textContent = chord.label;
+    document.getElementById('chordReading').textContent = 'ソロ（メロディを1音ずつ）';
+  } else {
   const [root, type] = splitName(name);
   state.root = root; state.type = type;
   document.getElementById('chordName').textContent = name;
   const R = ROOTS.find(r=>r.id===root), T = TYPES.find(t=>t.id===type);
   document.getElementById('chordReading').textContent = `${R.read}・${T.read}`;
+  }
   if(!playing()) showStrip([name]);
   updateButtons();
   if(!view) return;
@@ -168,8 +173,10 @@ function currentPose(now){
   return blendPose(poseFrom, poseTo, t);
 }
 window.setChord = setChord; window.__strumState = strumState;
+// ソロ弾きの曲で使う「1音だけ押さえる形」の名前（手の形の表にも入れる）
+const soloNames = () => [...new Set(SONGS.filter(s=>s.solo).flatMap(s=>s.bars.flat().map(c=>c[0])))];
 // 表を作る時・検証用（tools/make-pose-table.mjs から使う）
-window.__dbg = { chordNames: () => ROOTS.flatMap(r=>TYPES.map(t=>r.id+t.id)), chord: n => getChord(n), chordPose: n => computePose(getChord(n), view.rig),
+window.__dbg = { chordNames: () => [...ROOTS.flatMap(r=>TYPES.map(t=>r.id+t.id)), ...soloNames()], chord: n => getChord(n), chordPose: n => computePose(getChord(n), view.rig),
                  dumpPoseTable, setPoseTable, clearCache: () => clearPoseCache() };
 // コードのボタンを押した時：手がすばやく次の形になり、押さえ終わると同時にジャラーンと鳴る
 function pickChord(name){
@@ -596,10 +603,15 @@ function renderSong(){
   const sg = SONG();
   songList.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('on', i===song.idx));
   document.getElementById('songInfo').innerHTML =
-    `<b>${sg.title}</b><span>${sg.credit}</span><span>キー：${sg.key}・${sg.beats}拍子・右手 ${[...sg.pattern].map(c=>c==='D'?'↓':c==='U'?'↑':'・').join('')}</span><span>${sg.note}</span>` +
-    ((sg.melody || sg.score) ? '' : '<span class="muted">※この曲は伴奏（コードとストローク）だけのデモです</span>');
+    `<b>${sg.title}</b><span>${sg.credit}</span><span>キー：${sg.key}・${sg.beats}拍子・` +
+    (sg.solo ? '右手 人差し指で1音ずつ' : `右手 ${[...sg.pattern].map(c=>c==='D'?'↓':c==='U'?'↑':'・').join('')}`) + `</span><span>${sg.note}</span>` +
+    ((sg.melody || sg.score || sg.solo) ? '' : '<span class="muted">※この曲は伴奏（コードとストローク）だけのデモです</span>');
   document.getElementById('btnMelody').style.display = (sg.melody || sg.score) ? '' : 'none';
-  songSheet.innerHTML = sg.bars.map(b=>`<div class="bar">${b.map(c=>`<span>${c[0]}</span>`).join('')}</div>`).join('');
+  // ソロ弾きは、小節ごとに弾く音（弦・フレット）を並べる
+  // （「E3」＝E弦の3フレット、「A0」＝A弦の開放）
+  songSheet.innerHTML = sg.solo
+    ? sg.bars.map((b,i)=>`<div class="bar solo">${sg.solo.filter(n=>Math.floor(n[0]/sg.beats)===i).map(n=>`<span>${STRING_NAMES[n[2]]}${n[3]}</span>`).join('') || '<span>・</span>'}</div>`).join('')
+    : sg.bars.map(b=>`<div class="bar">${b.map(c=>`<span>${c[0]}</span>`).join('')}</div>`).join('');
   song.hl = null; highlightSong(-1);
 }
 function highlightSong(bar){
@@ -667,6 +679,11 @@ function tickSong(){
       song.running = 'ending';
       return;
     }
+    if(sg.solo){                                 // ソロ弾き：音の出だしで、その弦だけをはじく
+      if(sg.pattern[k] === 'D'){
+        const n = sg.solo.find(x => Math.round(x[0]*2) === k); if(n) playString(n[2], n[3], when, 0.42); }
+      continue;
+    }
     const slot = k % spb, bar = Math.floor(k/spb), last = bar === sg.bars.length-1;
     const c = chordAt(sg, k);
     const st = last ? (slot===0 ? 'D' : '-') : sg.pattern[slot];
@@ -699,7 +716,7 @@ function startSong(){
 function stopSong(){
   song.running = false; clearInterval(song.timer);
   document.getElementById('btnSong').textContent = '▶ 演奏する';
-  highlightSong(-1); showStrip([chordName()]); kick();
+  highlightSong(-1); if(SONG().solo) setChord(chordName(), false); showStrip([chordName()]); kick();
   updateFs();
 }
 document.getElementById('btnSong').onclick = ()=> song.running ? stopSong() : startSong();
@@ -710,7 +727,7 @@ function playing(){
   if(prog.running) return {o:prog, pattern:PATTERNS[prog.pat].p, end:Infinity, spb:8,
     chordAt: k => prog.list[(prog.pos + Math.floor(Math.max(0,k)/8)) % prog.list.length]};
   if(song.running){ const sg = SONG(), spb = sg.beats*2, total = sg.bars.length*spb;
-    return {o:song, pattern:sg.pattern, end:total, spb,
+    return {o:song, pattern:sg.pattern, end:total, spb, amp: sg.solo ? 0.45 : 1,
       chordAt: k => chordAt(sg, Math.min(total-1, Math.max(0, k)))}; }
   return null;
 }
@@ -755,7 +772,7 @@ function rightState(now, pl, ph){
   if(pl){
     if(ph < -0.5) return idleState(now/1000);
     if(pl.end !== Infinity && ph > pl.end - pl.spb + 0.6) return {theta: STRUM_AMP*1.1, lift: 6, wrist: -10, roll: 6, flick: 6};   // 最後のジャーンのあと
-    return strumState(ph, pl.pattern);
+    return strumState(ph, pl.pattern, pl.amp || 1);
   }
   if(oneShot){
     const t = (now - oneShot.start)/state.speed;

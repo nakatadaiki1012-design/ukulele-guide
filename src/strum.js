@@ -191,10 +191,10 @@ function strokeAmp(k, pattern){
 const smooth = t => t*t*(3-2*t);
 
 // 時刻 → 右手の振り（8分音符の位置 phase を渡す）
-export function strumState(phase, pattern){
+export function strumState(phase, pattern, amp=1){   // amp：振りの大きさ（ソロ弾きで1本の弦だけはじく時は小さく）
   const k = Math.floor(phase), f = phase - k;
   // その半周期の振り幅（となりの振りとなめらかにつなぐ）
-  const A = STRUM_AMP * (strokeAmp(k, pattern) + (strokeAmp(k+1, pattern) - strokeAmp(k, pattern))*smooth(f));
+  const A = amp * STRUM_AMP * (strokeAmp(k, pattern) + (strokeAmp(k+1, pattern) - strokeAmp(k, pattern))*smooth(f));
   // 振り始めはゆっくり、弦を通る瞬間（phase が整数）がいちばん速い：sin をさらに「締めた」形。
   // 弦の上を一瞬で通るので、音がバラけず「ジャン」とひとつになる
   const SNAP = 2.2;
@@ -216,7 +216,7 @@ export function strumState(phase, pattern){
   const kk = Math.round(phase), d = phase - kk;
   const ghost = pattern[((kk%pattern.length)+pattern.length)%pattern.length] === '-';
   const bump = Math.abs(d) < 0.5 ? Math.pow(Math.cos(Math.PI*d), 2) : 0;
-  return {theta, lift: (ghost ? 13*bump : 0) + upLift, wrist, roll, flick, v};
+  return {theta, lift: (ghost ? 13*amp*bump : 0) + upLift, wrist, roll, flick, v};
 }
 
 // 弾いていない時：力を抜いて、ゆっくり呼吸するように少しだけ揺れる

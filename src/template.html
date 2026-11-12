@@ -269,6 +269,8 @@
   .song-sheet{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
   .song-sheet .bar{display:flex;gap:6px;justify-content:center;padding:6px 2px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);font-weight:800;font-size:14px}
   .song-sheet .bar span+span{color:var(--sub)}
+  .song-sheet .bar.solo{gap:4px;font-size:12px;flex-wrap:wrap}
+  .song-sheet .bar.solo span+span{color:inherit}
   .song-sheet .bar.now{background:var(--on);color:#fff;border-color:var(--on)}
   .song-sheet .bar.now span+span{color:#d6f3f1}
   #songList{display:flex;gap:4px;flex-wrap:wrap}
