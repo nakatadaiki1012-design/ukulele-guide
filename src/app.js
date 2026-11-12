@@ -590,7 +590,7 @@ const SONG = () => SONGS[song.idx];
 const songList = document.getElementById('songList'), songSheet = document.getElementById('songSheet');
 SONGS.forEach((sg,i)=>{
   const b = document.createElement('button'); b.className = 'chip'; b.textContent = sg.short || sg.title;
-  b.onclick = ()=>{ stopSong(); song.idx = i; songBpm.value = sg.bpm; document.getElementById('songBpmVal').textContent = sg.bpm; renderSong(); setChord(sg.bars[0][0][0]); };
+  b.onclick = ()=>{ stopSong(); song.idx = i; if(sg.swing && !state.swing) document.querySelector('.swingBtn')?.click(); songBpm.value = sg.bpm; document.getElementById('songBpmVal').textContent = sg.bpm; renderSong(); setChord(sg.bars[0][0][0]); };
   songList.appendChild(b);
 });
 const songBpm = document.getElementById('songBpm');
@@ -690,9 +690,13 @@ function tickSong(){
       return;
     }
     if(sg.solo){                                 // ソロ弾き：音の出だしで、その弦だけをはじく
-      // 伴奏：その小節のコードを、拍の頭で小さくダウン（「1拍」の小節は1拍目だけ）
+      // 伴奏：その小節のコードを、伴奏のリズム（accompPattern）で小さく（「1拍」の小節は1拍目だけ）
       const ac = sg.accomp && sg.accomp[Math.floor(k/spb)], sl = k % spb;
-      if(ac && song.accompOn && sl % 2 === 0 && sl/2 < ac[1]) playStroke(getChord(ac[0]), 'D', when, sl === 0 ? 0.11 : 0.08, 0.02);
+      if(ac && song.accompOn){
+        const st = ac[1] < sg.beats ? (sl === 0 ? 'D' : '-') : (sg.accompPattern || 'D-D-D-D-')[sl];
+        if(st === 'D') playStroke(getChord(ac[0]), 'D', when, sl === 0 ? 0.11 : 0.085, 0.018);
+        if(st === 'U') playStroke(getChord(ac[0]), 'U', when, 0.06, 0.015);
+      }
       if(sg.pattern[k] === 'D'){
         const n = sg.solo.find(x => Math.round(x[0]*2) === k); if(n) playString(n[2], n[3], when, 0.42); }
       continue;
