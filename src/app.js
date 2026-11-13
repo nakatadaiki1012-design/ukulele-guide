@@ -1,7 +1,7 @@
 /* =========================================================
    ウクレレ・ハンドガイド（画面の操作・音・説明）
    ========================================================= */
-import { ROOTS, TYPES, getChord, PROGRESSIONS, SONGS, soloShape } from './data.js';
+import { ROOTS, TYPES, getChord, PROGRESSIONS, CHORDS, SONGS, soloShape } from './data.js';
 import { actx, ensureAudio, playString, playStroke, playNote, playBell, click, heardTime } from './audio.js';
 import { diagramSVG } from './diagram.js';
 import { chordSheetHTML, layoutSheet, tabSVG, tabX, TAB_X0 } from './sheet.js';
@@ -823,5 +823,9 @@ createView({
   idle(work);
 }).catch(err=>{
   console.error(err);
-  document.getElementById('mainWrap').innerHTML = '<p style="padding:30px;color:#c9b6a3">この端末では3D表示が使えません（WebGLが無効です）。</p>';
+  // 本当に WebGL が使えない時だけ、そう出す。それ以外（プログラムの間違いなど）は、エラーの内容を出す
+  let gl = null; try{ const c = document.createElement('canvas'); gl = c.getContext('webgl2') || c.getContext('webgl'); }catch(e){}
+  document.getElementById('mainWrap').innerHTML = gl
+    ? `<p style="padding:30px;color:#c9b6a3">3D表示の準備中にエラーが起きました。ページを読み込み直してください。<br><small>${String(err && err.message || err)}</small></p>`
+    : '<p style="padding:30px;color:#c9b6a3">この端末では3D表示が使えません（WebGLが無効です）。</p>';
 });
