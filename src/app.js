@@ -13,7 +13,8 @@ import { createView, VIEWS } from './view.js';
 import { BACKDROPS } from './backdrop.js';
 import { TIERS, DETECTED, QUALITY_LEVEL, setQualityLevel } from './quality.js';
 import { FINISHES } from './uke.js';
-import { PATTERNS, strumState, idleState, STRUM_AMP, STRUM_CFG } from './strum.js';
+import { PATTERNS, strumState, idleState, STRUM_AMP, STRUM_CFG, STRUM_X } from './strum.js';
+import { strY } from './geom.js';
 window.__strumCfg = STRUM_CFG;
 
 const state = {root:'C', type:'', mirror:false, badges:true, ghost:true, rightMode:'always', speed:1, swing:false, split:false, vib:[0,0,0,0],
@@ -88,7 +89,8 @@ window.__audio = { ensureAudio, playString, playStroke, playNote, get actx(){ re
 const soloNames = () => [...new Set(SONGS.filter(s=>s.solo).flatMap(s=>s.bars.flat().map(c=>c[0])))];
 // 表を作る時・検証用（tools/make-pose-table.mjs から使う）
 window.__dbg = { chordNames: () => [...ROOTS.flatMap(r=>TYPES.map(t=>r.id+t.id)), ...soloNames()], chord: n => getChord(n), chordPose: n => computePose(getChord(n), view.rig),
-                 dumpPoseTable, setPoseTable, clearCache: () => clearPoseCache() };
+                 dumpPoseTable, setPoseTable, clearCache: () => clearPoseCache(),
+                 soloPick: ph => soloPick(ph, playing()), song: () => SONG() };                  // ソロ弾きの右手（演奏中だけ）
 // コードのボタンを押した時：手がすばやく次の形になり、押さえ終わると同時にジャラーンと鳴る
 function pickChord(name){
   if(prog.running || song.running){ return; }              // 練習・曲デモの演奏中はコードを変えない
@@ -698,10 +700,48 @@ function upcoming(pl, ph){
 }
 // 右手の今の状態（振りの角度・浮かせる量）
 const REST = {theta: -STRUM_AMP, lift: 7, wrist: 4, roll: 0, flick: -4};
+/* ソロ弾きの右手：音ごとに、その弦だけを人差し指ではじく。
+   ・次の音の弦の、少し手前（4弦側）に指先を構えて待つ
+   ・音の瞬間に、その弦を上から下（1弦の方向）へ通り抜ける（その弦を通る瞬間がいちばん速い）
+   ・通り抜けたら、となりの弦に当たる前で止める。次の弦へは、弦から少し浮かせて移る（ほかの弦に当たらないように） */
+const PICK = {half: 0.07, over: 5, lift: 5, wrist: -10, roll: -8};    // はじく前後の秒数・弦を越える幅(mm)・移る時に浮かせる量(mm)・手首とひねり（振りに合わせて）
+const pickPose = theta => ({theta, wrist: PICK.wrist*theta/STRUM_AMP, roll: PICK.roll*theta/STRUM_AMP});
+// 指先がちょうど y（弦をまたぐ向きの位置 mm）を通る振りの角度。手のモデルで実際に指先の位置を計算して合わせる（弦ごとに1回だけ）
+const pickTheta = {};
+function thetaAtY(y){
+  const key = y.toFixed(2); if(pickTheta[key] != null) return pickTheta[key];
+  const tipY = th => view.rightHandPose(view.rigR, {...pickPose(th), lift: 0, flick: 6, v: 1}).tip[1];
+  let lo = -STRUM_AMP*1.6, hi = STRUM_AMP*1.6;
+  for(let i=0;i<30;i++){ const m = (lo+hi)/2; (tipY(m) < y) ? lo = m : hi = m; }
+  return (pickTheta[key] = (lo+hi)/2);
+}
+const stringTheta = (si, off=0) => thetaAtY(strY(si, STRUM_X) + off);
+function soloPick(ph, pl){
+  const sg = SONG(), notes = sg.solo, e8 = pl.o.e8;
+  const secs = (a, b) => (warp(b) - warp(a))*e8;                     // 8分音符の位置 a→b の秒数（スイングも反映）
+  let i = -1; for(let j=0;j<notes.length;j++){ if(notes[j][0]*2 <= ph) i = j; else break; }
+  const prev = notes[i], next = notes[i+1];
+  const pre = n => stringTheta(n[2], -PICK.over), post = n => stringTheta(n[2], PICK.over);
+  // 指先は、いつも爪の側（v=1）・軽くのばした形（flick 6）で。当たる所が動かないので、指先の位置がぶれない
+  const st = (theta, lift) => ({...pickPose(theta), lift, v: 1, flick: 6});
+  // はじく瞬間のまわり（前後 half 秒）：手前 → 弦 → 越えた所 へ、まん中がいちばん速く
+  const sweep = (n, s) => { const e = Math.sin(Math.PI/2*Math.max(-1, Math.min(1, s)));
+    return st(stringTheta(n[2]) + (e < 0 ? (stringTheta(n[2]) - pre(n))*e : (post(n) - stringTheta(n[2]))*e), 0); };
+  if(prev && secs(prev[0]*2, ph) < PICK.half) return sweep(prev, secs(prev[0]*2, ph)/PICK.half);
+  if(next && secs(ph, next[0]*2) < PICK.half) return sweep(next, -secs(ph, next[0]*2)/PICK.half);
+  if(!prev) return st(next ? pre(next) : 0, 2);                      // 最初の音の前：その弦の手前で待つ
+  if(!next) return st(post(prev), 3);                                // 最後の音のあと
+  // 音と音の間：前の音を越えた所から、次の音の手前へ。弦をまたいで移る時は少し浮かせる
+  const t0 = prev[0]*2, t1 = next[0]*2, a = secs(t0, ph) - PICK.half, len = Math.max(1e-3, secs(t0, t1) - 2*PICK.half);
+  const g = Math.min(1, Math.max(0, a/len)), e = g*g*(3-2*g);
+  const lift = (prev[2] === next[2] ? 1.5 : PICK.lift) * Math.sin(Math.PI*g);
+  return st(post(prev) + (pre(next) - post(prev))*e, lift);
+}
 function rightState(now, pl, ph){
   if(pl){
     if(ph < (pl.start||0) - 0.5) return idleState(now/1000);
     if(pl.end !== Infinity && ph > pl.end - pl.spb + 0.6) return {theta: STRUM_AMP*1.1, lift: 6, wrist: -10, roll: 6, flick: 6};   // 最後のジャーンのあと
+    if(pl.o === song && SONG().solo) return soloPick(ph, pl);
     return strumState(ph, pl.pattern, pl.amp || 1);
   }
   if(oneShot){
