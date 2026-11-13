@@ -10,11 +10,15 @@ const bufCache = {};
 export function ensureAudio(){
   if(!actx){
     actx = new (window.AudioContext||window.webkitAudioContext)();
-    master = actx.createGain(); master.gain.value = 0.7;
-    const body = actx.createBiquadFilter(); body.type='peaking'; body.frequency.value=260; body.Q.value=1.2; body.gain.value=5;
-    const lp = actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=5200;
+    // 弦の音 → 胴の響き（木の箱が鳴る）→ 部屋の響き（ほんの少し）→ スピーカー
+    master = actx.createGain(); master.gain.value = 0.62;
+    const body = actx.createConvolver(); body.normalize = false; body.buffer = bodyIR();
+    const room = actx.createConvolver(); room.buffer = roomIR();
+    const wet = actx.createGain(); wet.gain.value = 0.16;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7500;
     master.connect(body); body.connect(lp); lp.connect(actx.destination);
-    // 弦の音（G4〜B5あたり）を、ひまな時に1つずつ先に作っておく（初めて鳴らす音で引っかからないように）
+    lp.connect(room); room.connect(wet); wet.connect(actx.destination);
+    // 弦の音（C4〜C6あたり）を、ひまな時に1つずつ先に作っておく（初めて鳴らす音で引っかからないように）
     const notes = []; for(let m=60; m<=84; m++) notes.push(m);
     const warm = () => { if(notes.length){ pluckBuffer(notes.shift()); setTimeout(warm, 40); } };
     setTimeout(warm, 200);
@@ -23,18 +27,67 @@ export function ensureAudio(){
 }
 // 決まった乱数
 function rng(seed){ return ()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; }; }
+
+/* ウクレレの胴の響き：胴の中の空気と表板が、いくつかの決まった高さでよく鳴る（共鳴）。
+   その鳴り方（すぐ消える響き）を足し合わせたものを、弦の音に重ねる（たたみこみ）。いちばん頭は元の音そのもの */
+const BODY_MODES = [   // [高さHz, 強さ, 消える速さ（秒）]：コンサートウクレレの胴の共鳴の目安
+  [270, 0.55, 0.050], [420, 0.40, 0.040], [560, 0.30, 0.032], [880, 0.20, 0.022],
+  [1250, 0.14, 0.016], [2050, 0.08, 0.010], [3100, 0.05, 0.007]];
+function bodyIR(){
+  const sr = actx.sampleRate, n = Math.floor(sr*0.25), b = actx.createBuffer(2, n, sr);
+  for(let ch=0; ch<2; ch++){
+    const y = b.getChannelData(ch);
+    y[0] = 1;
+    for(const [f, a, d] of BODY_MODES){
+      const ff = f*(ch ? 1.01 : 0.99);                       // 左右で少しだけ違えて広がりを出す
+      for(let i=1;i<n;i++){ const t = i/sr; y[i] += a*0.06*Math.exp(-t/d)*Math.sin(2*Math.PI*ff*t); }
+    }
+  }
+  return b;
+}
+// 部屋の響き：ほんの少し（0.5秒くらいで消える、さらさらした響き）
+function roomIR(){
+  const sr = actx.sampleRate, n = Math.floor(sr*0.7), b = actx.createBuffer(2, n, sr);
+  for(let ch=0; ch<2; ch++){
+    const y = b.getChannelData(ch), r = rng(911 + ch*7);
+    let lp = 0;
+    for(let i=0;i<n;i++){ const t = i/sr; lp = lp*0.6 + (r()*2-1)*0.4; y[i] = lp*Math.exp(-t/0.16)*(t < 0.012 ? t/0.012 : 1)*0.35; }
+  }
+  return b;
+}
+
+/* 弦の音（カープラス・ストロング法を、ナイロン弦向けに手直ししたもの）
+   ・音の高さ：1往復の遅れを「整数＋小数（オールパスフィルタ）」にして、ぴったり正しい高さに（前は最大10セントずれていた）
+   ・はじく場所：サウンドホールのあたり（弦の長さの約1/5）ではじくと出にくくなる倍音を、最初の波から抜いておく
+   ・指の腹で弾くやわらかさ：最初の波をなめらかにする（爪のような硬い音にしない）
+   ・ナイロン弦：高い倍音ほど早く消える。低い音は長く、高い音は短く響く */
 function pluckBuffer(midi){
   if(bufCache[midi]) return bufCache[midi];
-  const sr = actx.sampleRate, freq = 440*Math.pow(2,(midi-69)/12);
-  const len = Math.floor(sr*2.4);
-  const N = Math.max(2, Math.round(sr/freq - 0.5));
+  const sr = actx.sampleRate, f0 = 440*Math.pow(2,(midi-69)/12);
+  const len = Math.floor(sr*2.6);
   const buf = actx.createBuffer(1, len, sr), y = buf.getChannelData(0);
-  const r = rng(midi*13+5);
-  let prev = 0;
-  for(let i=0;i<N;i++){ const v = r()*2-1; prev = prev*0.5 + v*0.5; y[i] = prev; }
-  const decay = 0.9965;
-  for(let i=N;i<len;i++) y[i] = decay*0.5*(y[i-N] + y[i-N-1 >= 0 ? i-N-1 : 0]);
-  // 頭のノイズを少し整える
+  const D = sr/f0;                                   // 1往復の長さ（サンプル）
+  const S = 0.44;                                    // ループの中のなめらかにする強さ（0.5で最大：大きいほどやわらかい）
+  const N = Math.floor(D - S - 0.15), d = D - N - S; // 整数の遅れ N と、オールパスで作る小数の遅れ d（0.15〜1.15）
+  const C = (1 - d)/(1 + d);
+  const T60 = Math.max(1.1, 3.0 - (midi-60)*0.07);   // 音が1/1000（-60dB）まで小さくなる時間（秒）
+  const rho = Math.pow(0.001, 1/(f0*T60));
+  // 最初の波：ノイズ → はじく場所の倍音を抜く → 指の腹のやわらかさ
+  const r = rng(midi*13+5), P = Math.max(1, Math.round(D*0.2)), exc = new Float32Array(N+P+2);
+  const raw = new Float32Array(N+P+2); for(let i=0;i<raw.length;i++) raw[i] = r()*2-1;
+  let lp = 0;
+  for(let i=0;i<=N;i++){ const v = raw[i] - (i >= P ? raw[i-P] : 0); lp = lp*0.45 + v*0.55; exc[i] = lp; }
+  // ループ
+  let apIn = 0, apOut = 0;
+  for(let i=0;i<len;i++){
+    const a = i-N >= 0 ? y[i-N] : 0, b = i-N-1 >= 0 ? y[i-N-1] : 0;
+    const u = rho*((1-S)*a + S*b);
+    const v = C*u + apIn - C*apOut; apIn = u; apOut = v;
+    y[i] = (i <= N ? exc[i] : 0) + v;
+  }
+  // はじいた瞬間の小さな「ピッ」（指が弦にふれる音）
+  const r2 = rng(midi*7+3), nClick = Math.floor(sr*0.004);
+  for(let i=0;i<nClick;i++) y[i] += (r2()*2-1)*0.12*(1 - i/nClick);
   let mx = 0; for(let i=0;i<len;i++) mx = Math.max(mx, Math.abs(y[i]));
   for(let i=0;i<len;i++) y[i] /= (mx||1);
   bufCache[midi] = buf; return buf;

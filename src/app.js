@@ -83,6 +83,7 @@ function currentPose(now){
   return blendPose(poseFrom, poseTo, t);
 }
 window.setChord = setChord; window.__strumState = strumState;
+window.__audio = { ensureAudio, playString, playStroke, playNote, get actx(){ return actx; } };   // 音の確認用
 // ソロ弾きの曲で使う「1音だけ押さえる形」の名前（手の形の表にも入れる）
 const soloNames = () => [...new Set(SONGS.filter(s=>s.solo).flatMap(s=>s.bars.flat().map(c=>c[0])))];
 // 表を作る時・検証用（tools/make-pose-table.mjs から使う）
