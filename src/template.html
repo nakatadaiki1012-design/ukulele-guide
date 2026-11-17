@@ -298,6 +298,11 @@
   .song-sheet .bar.now span+span{color:#d6f3f1}
   #songList{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
   .runbar.top{margin:0 0 10px}
+  .songnav{display:inline-flex}
+  .songnav .chip{padding:5px 10px}
+  .songnav .chip:first-child{border-radius:999px 0 0 999px}
+  .songnav .chip:last-child{border-radius:0 999px 999px 0;margin-left:-1px}
+  #songSecs{display:inline-flex;gap:4px}
   .song-sheet[hidden]{display:none}
   #tab-songs .song-info{margin-top:8px}
   footer{max-width:1400px;margin:0 auto;padding:0 16px 20px;color:var(--dim);font-size:11px}
@@ -401,6 +406,8 @@
         <!-- よく使う順に：演奏ボタン → コード進行（押せる） → 曲えらび → 曲の説明 -->
         <div class="runbar top">
           <button class="play big" id="btnSong">▶ 演奏する</button>
+          <span class="seg songnav" id="songNav"><button class="chip" data-d="-1" title="1つ前の音（コード弾きは1小節前）へ（←キー）">◀</button><button class="chip" data-d="1" title="1つ先の音（コード弾きは1小節先）へ（→キー）">▶</button></span>
+          <span id="songSecs"></span>
           <button id="btnMelody" class="chip on">メロディ</button>
           <button class="chip swingBtn" title="裏拍を少し遅らせて「タッカ・タッカ」とはずませる">スイング</button>
           <button class="chip speedBtn" title="押すたびに ×1 → ×¾ → ×½ → ×¼（スロー再生）">速さ ×1</button>

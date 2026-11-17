@@ -155,6 +155,8 @@ export const SONGS = [
     // 伴奏のコード。1小節目の「ソ」はアウフタクトなので、2小節目から。[コード, 弾く拍数]（1＝1拍目だけ鳴らして残りは休み）
     // 伴奏のリズム：スイングで「ジャ(ン)ジャッカ(ンッ)カジャッカ」＝8分音符の2つ目と5つ目は空振り
     accompPattern:'D-DU-UDU', swing:true,
+    // 前半・後半へ飛ぶボタン（後半は「レミーソードーーミレーソーシーー」から）。[名前, 何拍目から]
+    sections:[['前半', 3], ['後半', 83]],
     accomp:[null,['D',4],['D',4],['G',4],['G',1],['G',4],['C',4],['G',4],['G',4],['D',4],['D',4],['D',4],['D',1],['G',4],['C',4],['G',4],['G',4],['A7',4],['D',4],['G',4],['G',4],['C',4],['C',4],['G',4],['G',4],['D',4],['D',4],['G',4],['G',4],['C',4],['C',4],['G',4],['G',4],['D',4],['D',4],['G',4],['G',1]]
   },
   {
@@ -191,6 +193,7 @@ for(const s of SONGS) if(s.soloFrom){
   s.silentBars = new Set(src.accomp.map((a,i)=>a ? -1 : i).filter(i=>i>=0));
   s.onceBars = new Set(src.accomp.map((a,i)=>a && a[1] < s.beats ? i : -1).filter(i=>i>=0));
   s.melodyNotes = src.solo.map(([beat, len, si, f])=>({midi: STRING_MIDI[si] + f, beat, len}));
+  s.sections = src.sections;
 }
 // 1小節の中身を [コード, 拍数] にそろえる
 for(const s of SONGS) s.bars = s.bars.map(b => b.length===1 && !Array.isArray(b[0]) ? [[b[0], s.beats]] : b.map(c => Array.isArray(c) ? c : [c, s.beats]));

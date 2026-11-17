@@ -485,6 +485,7 @@ document.getElementById('btnProg').onclick = ()=> prog.running ? stopProg() : st
 const song = {idx:0, running:false, timer:null, t0:0, e8:0.3, nextSlot:0, mel:0, notes:[], melodyOn:true, accompOn:true, hl:null, st0:0, selBeat:null, hn:null};
 const SONG = () => SONGS[song.idx];
 const songList = document.getElementById('songList'), songSheet = document.getElementById('songSheet');
+const songSecs = document.getElementById('songSecs');
 SONGS.forEach((sg,i)=>{
   const b = document.createElement('button'); b.className = 'chip'; b.textContent = sg.short || sg.title;
   b.onclick = ()=>{ stopSong(); song.idx = i; if(sg.swing && !state.swing) document.querySelector('.swingBtn')?.click(); songBpm.value = sg.bpm; document.getElementById('songBpmVal').textContent = sg.bpm; renderSong(); setChord(sg.bars[0][0][0]); };
@@ -510,8 +511,10 @@ function renderSong(){
   const bm = document.getElementById('btnMelody');
   bm.style.display = (sg.melody || sg.score || sg.accomp || sg.melodyNotes) ? '' : 'none';
   bm.textContent = sg.accomp ? '伴奏' : 'メロディ'; bm.classList.toggle('on', sg.accomp ? song.accompOn : song.melodyOn);
-  song.selBeat = null; song.hn = null;
+  song.selBeat = null; song.selIdx = null; song.hn = null;
   if(!song.running) document.getElementById('btnSong').textContent = '▶ 演奏する';
+  // 前半・後半へ飛ぶボタン（その曲に区切りがある時だけ）
+  songSecs.innerHTML = (sg.sections || []).map(([name, beat])=>`<button class="chip" data-beat="${beat}" title="${name}の頭へ">${name}へ</button>`).join('');
   // コード弾きは、押せるコードの表。ソロ弾きは、3D画面の下のタブ譜で見る（この表は出さない）
   songSheet.hidden = !!sg.solo;
   songSheet.innerHTML = sg.solo ? '' : chordSheetHTML(sg);
@@ -546,8 +549,9 @@ function tickSong(){
     const delay = Math.max(0,(when-actx.currentTime)*1000);
     song.nextSlot++;
     const st0 = song.st0;                         // 曲の始まり（アウフタクトの曲や、途中から始める時は、小節の途中から）
-    if(k < st0){                                 // カウント（1小節）
-      if(((k-st0) & 1) === 0) click(when, k === st0-spb);
+    if(k < st0){                                 // カウント（拍の頭でクリック。小節の1拍目は強く）
+      const sl = ((k % spb) + spb) % spb;
+      if((sl & 1) === 0) click(when, sl === 0);
       continue;
     }
     if(k >= total){                              // おしまい
@@ -578,6 +582,13 @@ function tickChordSlot(sg, k, when){
   if(st==='D') playStroke(chord, 'D', when, slot===0 ? 0.30 : 0.24);
   if(st==='U') playStroke(chord, 'U', when, 0.15);
 }
+/* カウントの長さ（8分音符の数）。小節の頭から始める時は1小節（4つ）。
+   アウフタクト（小節の途中、たとえば4拍目のソ）から始める時は、その小節の頭から数えて「1・2・3」とカウントしてすぐ入る。
+   ただし残りが1拍しかない時は、もう1小節前から数える */
+function countIn(st0, spb){
+  const off = ((st0 % spb) + spb) % spb;
+  return off === 0 ? spb : off >= 4 ? off : off + spb;
+}
 function startSong(fromBeat=null){
   ensureAudio(); stopProg();
   const sg = SONG();
@@ -585,10 +596,10 @@ function startSong(fromBeat=null){
   if(view) for(const b of sg.bars) for(const [c] of b) computePose(getChord(c), view.rig);
   shownChord = '';
   song.e8 = eighth(+songBpm.value);
-  const cin = sg.beats*2;
   // 始める所（8分音符の番号）。ふつうは曲の頭（アウフタクトの曲は1小節目の途中）。楽譜の音を押した時は、その音から
   const st0 = song.st0 = Math.round((fromBeat ?? (sg.startBeat||0))*2);
-  song.t0 = actx.currentTime + 0.3 + (cin - st0)*song.e8;   // 1小節目の頭の時刻（始まる所の前に1小節カウント）
+  const cin = countIn(st0, sg.beats*2);
+  song.t0 = actx.currentTime + 0.3 + (cin - warp(st0))*song.e8;   // 1小節目の頭の時刻（始まる所の前にカウント）
   song.nextSlot = st0 - cin;
   // メロディの開始位置（拍）
   let b = -(sg.pickup||0); song.notes = []; song.mel = 0;
@@ -634,7 +645,7 @@ function renderTab(){
 function selectSoloNote(i){
   const n = SONG().solo[i];
   ensureAudio();
-  song.selBeat = n[0];
+  song.selBeat = n[0]; song.selIdx = i;
   tabScroll.querySelectorAll('.tn').forEach(x=>x.classList.toggle('sel', +x.dataset.i === i));
   if(song.running){ stopSong(); startSong(n[0]); return; }
   tabScroll.scrollTo({left: Math.max(0, tabX(n[0]) - TAB_X0 - 40), behavior:'smooth'});
@@ -821,10 +832,36 @@ function loop(now){
 
 window.addEventListener('resize', kick);
 
-// キーボード：スペースで鳴らす
+/* 曲デモの中を移動する：その拍へ（演奏中ならそこから弾き直す。止まっている時はそこを選んで ▶ でそこから）
+   ソロ弾きは音ごと、コード弾きは小節ごとに、1つ前・1つ先へ（◀ ▶ ボタン、← → キー） */
+function jumpSong(beat){
+  const sg = SONG();
+  if(sg.solo){ const i = sg.solo.findIndex(n => n[0] >= beat - 1e-6); if(i >= 0) selectSoloNote(i); return; }
+  ensureAudio(); song.selBeat = beat;
+  if(song.running){ stopSong(); startSong(beat); return; }
+  const c = chordAt(sg, Math.round(beat*2));
+  setChord(c); strum(getChord(c));
+  document.getElementById('btnSong').textContent = '▶ ここから演奏';
+}
+function stepSong(d){
+  const sg = SONG();
+  if(sg.solo){
+    const cur = song.running ? Math.max(0, song.hn ?? 0) : (song.selIdx ?? (d > 0 ? -1 : 0));
+    selectSoloNote(Math.min(sg.solo.length-1, Math.max(0, cur + d)));
+    return;
+  }
+  const curBar = song.running ? Math.max(0, song.hl ?? 0) : Math.floor((song.selBeat ?? (sg.startBeat || 0))/sg.beats);
+  const bar = Math.min(sg.bars.length-1, Math.max(0, curBar + d));
+  jumpSong(bar === 0 && sg.startBeat ? sg.startBeat : bar*sg.beats);
+}
+songSecs.addEventListener('click', e=>{ const b = e.target.closest('[data-beat]'); if(b) jumpSong(+b.dataset.beat); });
+document.getElementById('songNav').addEventListener('click', e=>{ const b = e.target.closest('[data-d]'); if(b) stepSong(+b.dataset.d); });
+
+// キーボード：スペースで鳴らす。曲デモでは ← → で1つ前・1つ先へ
 document.addEventListener('keydown', e=>{
-  if(e.target.tagName==='INPUT') return;
+  if(e.target.tagName==='INPUT' || e.target.tagName==='SELECT') return;
   if(e.code==='Space'){ e.preventDefault(); strum(getChord(chordName())); }
+  if((e.key==='ArrowLeft' || e.key==='ArrowRight') && activeTab()==='songs'){ e.preventDefault(); stepSong(e.key==='ArrowLeft' ? -1 : 1); }
 });
 
 renderProg();
