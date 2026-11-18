@@ -294,6 +294,9 @@ function camLayout(){
 }
 async function camStart(){
   camWin.hidden = false; camBtn.classList.add('on'); camLayout();
+  // カメラを使う時は、自動で3Dを鏡の形に（止めたら元のアングルに戻す）
+  beforeCam = {angle: angle1, mirror: state.mirror};
+  matchMirror();
   camMsg.className = 'cammsg on'; camMsg.textContent = 'カメラを準備中…';
   try{
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('nosupport');
@@ -309,17 +312,21 @@ async function camStart(){
 function camStop(){
   camStream && camStream.getTracks().forEach(t=>t.stop()); camStream = null;
   camVideo.srcObject = null; camWin.hidden = true; camBtn.classList.remove('on'); camLayout();
+  if(beforeCam){ setAngle1(beforeCam.angle); state.mirror = beforeCam.mirror; applyToggles(); saveSettings(); kick(); beforeCam = null; }
 }
 camBtn.onclick = ()=> camStream || !camWin.hidden ? camStop() : camStart();
 document.getElementById('camClose').onclick = camStop;
 document.getElementById('camLayoutBtn').onclick = ()=>{ state.cam.layout = state.cam.layout === 'side' ? 'pip' : 'side'; camLayout(); saveSettings(); };
 document.getElementById('camFlip').onclick = ()=>{ state.cam.flip = !state.cam.flip; camLayout(); saveSettings(); };
 document.getElementById('camSize').onclick = ()=>{ state.cam.size = {s:'m', m:'l', l:'s'}[state.cam.size]; camLayout(); saveSettings(); };
-document.getElementById('camMatch').onclick = ()=>{
-  angle1 = 'front'; document.getElementById('angleBtn').textContent = '🎥 ' + VIEWS.front.label;
-  if(view) view.setView('front');
+document.getElementById('camMatch').onclick = ()=>matchMirror();
+// 3Dを鏡の形に：正面（向かい合った向き）＋左右反転にして、カメラに映った自分と同じ向きにする
+function setAngle1(a){ angle1 = a; document.getElementById('angleBtn').textContent = '🎥 ' + VIEWS[a].label; if(view) view.setView(a); }
+function matchMirror(){
+  setAngle1('front');
   state.mirror = true; applyToggles(); saveSettings(); kick();
-};
+}
+let beforeCam = null;      // カメラを使う前のアングルと左右反転（カメラを止めたら元に戻す）
 // ドラッグで動かす（ボタンの上ではドラッグしない）
 {
   let drag = null;
