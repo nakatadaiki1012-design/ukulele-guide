@@ -86,6 +86,9 @@
   body.fs .fsbar{display:flex;flex-direction:column;gap:5px;position:absolute;left:50%;transform:translateX(-50%);bottom:max(8px, env(safe-area-inset-bottom));
     width:min(760px,calc(100% - 16px));background:rgba(255,255,255,.72);backdrop-filter:blur(8px);border-radius:14px;padding:6px;box-shadow:0 4px 18px rgba(0,0,0,.15)}
   .fsplay{display:flex;gap:6px}
+  .fstempo{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto}
+  .fstempo b{min-width:40px;text-align:center;font-size:13px}
+  .fstempo .chip{padding:4px 10px;min-width:0}
   .fsplay #fsName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font-weight:700}
   .fsbar .fsplay #fsPlay{flex:0 0 auto;min-width:110px;padding:6px 14px}
   .fsbar .fsplay #fsName{flex:1 1 auto}
@@ -341,7 +344,7 @@
       </div>
       <!-- 全画面の時だけ：3D画面の下にコードのボタンと再生ボタンを重ねる -->
       <div class="picker fsbar" id="fsBar">
-        <div class="fsplay"><button id="fsName" class="chip" title="押すと 練習／曲デモ を切り替え"></button><button id="fsPlay" class="play">▶</button></div>
+        <div class="fsplay"><button id="fsName" class="chip" title="押すと 練習／曲デモ を切り替え"></button><span class="fstempo" id="fsTempo"><button class="chip" data-d="-5" title="テンポを下げる">−</button><b id="fsBpm">♩100</b><button class="chip" data-d="5" title="テンポを上げる">＋</button></span><button id="fsPlay" class="play">▶</button></div>
       </div>
       <div class="chordCard" id="chordCard"></div>
     </div>

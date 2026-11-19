@@ -254,7 +254,16 @@ function updateFs(){
   const run = pr ? prog.running : song.running;
   fsName.textContent = pr ? '練習：' + prog.list.join('→') : '曲：' + SONG().title;
   fsPlay.textContent = run ? '■ ストップ' : '▶ ' + (pr ? 'スタート' : '演奏する');
+  fsBpm.textContent = '♩' + (pr ? bpmEl : songBpm).value;
 }
+// 全画面のテンポ：− ＋ で5ずつ（練習・曲デモの、いま開いている方のテンポのつまみを動かす）
+const fsBpm = document.getElementById('fsBpm');
+document.querySelectorAll('#fsTempo [data-d]').forEach(b=>b.onclick = ()=>{
+  const el = activeTab() === 'practice' ? bpmEl : songBpm;
+  el.value = Math.min(+el.max, Math.max(+el.min, +el.value + +b.dataset.d));
+  el.dispatchEvent(new Event('input'));
+  updateFs();
+});
 function setFS(on){
   fsOn = on;
   document.body.classList.toggle('fs', on);
@@ -830,7 +839,9 @@ function loop(now){
       else { highlightSong(ph < 0 || ph >= pl.end ? -1 : Math.floor(ph/pl.spb)); highlightNote(ph >= pl.end ? -1 : ph); if(SONG().solo) scrollTab(Math.max(0, ph/2)); }
     } else pose = currentPose(now);
     const right = window.__forceRight || smoothRight(showRight ? rightState(now, pl, phR) : null, now);
-    view.render(pose, {...state, right, quality, animating: handMoving || active});
+    // 全画面では、下のボタンの帯に手が隠れないように、その高さを3D表示に伝える（帯の上に収まるように少し引いて映す）
+    const padBottom = fsOn && !state.split ? fsBar.offsetHeight + 12 : 0;
+    view.render(pose, {...state, right, quality, padBottom, animating: handMoving || active});
     dirty = false;
   }
   wasMoving = moving;

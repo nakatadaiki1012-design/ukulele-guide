@@ -294,7 +294,18 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
       renderer.setScissorTest(false);
       renderer.setViewport(0, 0, Wc, H);
     } else {
-      if(Math.abs(camera.aspect - Wc/H) > 1e-3) setAspect(camera, Wc/H);
+      // 下に重なるパネル（全画面の時のボタンの帯）がある時：パネルの上の見える部分に、ふだんの画面と同じ範囲が
+      // 収まるように引いて映し（zoom）、そのまん中に手が来るように上へずらす（setViewOffset）。
+      // 映す画面を下へ pad だけのばした大きな画面を考え、その上側（パネルにかからない所）を切り出す
+      const pad = Math.min(Math.max(0, Math.round(opts.padBottom || 0)), Math.round(H*0.6));
+      const key = pad + ':' + Wc + ':' + H;
+      if(Math.abs(camera.aspect - Wc/(H+pad)) > 1e-3) setAspect(camera, Wc/(H+pad));
+      if(camera._padKey !== key){
+        camera._padKey = key;
+        camera.zoom = pad ? (H - pad)/(H + pad) : 1;
+        if(pad) camera.setViewOffset(Wc, H+pad, 0, pad, Wc, H); else camera.clearViewOffset();
+        camera.updateProjectionMatrix();
+      }
       renderer.render(scene, camera);
     }
     let html = '';
