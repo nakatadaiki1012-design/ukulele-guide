@@ -26,7 +26,7 @@ export const HAND_CFG = {
   tipTilt: 28,                                    // 指先は真上から何度くらい傾けて当てるか
   headShift: 24,                                   // 手（指の付け根）をヘッド側へずらす量(mm)。大きいほどネックのヘッド側が手のひらに乗り、指がのびる
   barreFollows: [0.5, 0.7, 0.85, 1],                    // セーハで手を人差し指に合わせる割合の候補（コードごとに、いちばん無理のないものを選ぶ）
-  barreFoldFrom: 62, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
+  barreFoldFrom: 25, barreFoldW: 2.5,              // セーハの人差し指の第二関節の曲がりが、この角度を超えた分にコストをかける
   barreCurl: 32, barreBehind: 6,                   // セーハ中、使わない指の指先を、付け根からどれだけ上（弦をまたぐ向き）／ボディ側に置くか（mm）
   barreThumbW: 0.1,                                // セーハ：親指をセーハの真裏に寄せる強さ（ふつうは 0.02）
   barreThumbX: -6,                                 // セーハ：親指の腹を、人差し指（セーハ）の真裏からボディ側へ何mmずらすか
@@ -39,6 +39,7 @@ export const HAND_CFG = {
   barreDistW: 0.5,                                 // セーハ：付け根と第二関節の距離を骨の長さに合わせる重み
   mcpBack: 22, mcpBackW: 0.2,                      // 指の付け根が手の甲側へ反ってよい角度(度)と、超えた時の重み
   barreStraight: 0.93, barreBack: 0.3,            // セーハ：人差し指をどれくらいまっすぐのばすか（1＝完全にまっすぐ）、手を指の後ろ（ボディ側）へ置く割合
+  indexNearB: 45,                                  // セーハの時、人差し指の付け根がネックから離れてよい距離(mm)
   palmGap: [0, 20, 32, 42], palmGapW: 0.6, indexNear: 10, indexNearW: 0.5,        // 指の付け根（人差し指→小指）がネックの表面から離れていてほしい距離(mm)。小指側ほど大きく＝手のひらが斜めになって、ネックから離れる
   thumbY: -14, thumbPeek: 12, thumbPeekZ: -6,                     // 親指の腹の位置（ネック裏のやや1弦G寄り）と、先をネックの上の縁から何mmのぞかせるか
 };
@@ -367,7 +368,8 @@ function buildHand(chord, rig, prm, thumbStart){
     const sl = Math.max(0, Math.abs(K[1][0] - g.P[0]) - HAND_CFG.barreSlantFrom); addc('slant', sl*sl*HAND_CFG.barreSlantW);
   }
   // 人差し指の付け根は、ネックについてもよい（ここを支点に、手が小指側へ斜めに開く）。少し近い方が楽な形として好む
-  { const g = neckSD(K[1]); if(g > HAND_CFG.indexNear) cost += (g-HAND_CFG.indexNear)*(g-HAND_CFG.indexNear)*HAND_CFG.indexNearW; }
+  // セーハの時は、人差し指をまっすぐのばすので、付け根はネックの縁からずっと下に離れてよい（indexNearB）
+  { const g = neckSD(K[1]), lim = barre ? HAND_CFG.indexNearB : HAND_CFG.indexNear; if(g > lim) cost += (g-lim)*(g-lim)*HAND_CFG.indexNearW; }
   // 手首の曲がりすぎ（前腕の向きとの角度）
   const bend = Math.acos(Math.max(-1, Math.min(1, dot(H.F, mul(norm(HAND_CFG.arm),-1)))))/DEG;
   if(bend > 30) cost += (bend-30)*(bend-30)*0.02;
@@ -383,7 +385,7 @@ function buildHand(chord, rig, prm, thumbStart){
 
 // 手の向き・位置を少しずつ変えて、いちばん無理のない持ち方をさがす
 const PRM_STEP = {pitch:8, yaw:8, roll:8, yK:5, zK:5, dx1:4, dx2:4, dx3:4, dx4:4};
-const PRM_LIM  = {pitch:[-45,45], yaw:[-35,35], roll:[-35,35], yK:[18,90], zK:[-42,2], dx1:[-24,4], dx2:[-24,4], dx3:[-24,4], dx4:[-24,4]};
+const PRM_LIM  = {pitch:[-45,45], yaw:[-35,35], roll:[-35,35], yK:[18,90], zK:[-42,12], dx1:[-24,4], dx2:[-24,4], dx3:[-24,4], dx4:[-24,4]};
 const poseCache = new Map();
 function localSearch(chord, rig, prm, pressing, scales){
   let best = buildHand(chord, rig, prm), thStart = best.th.ang;
@@ -424,6 +426,8 @@ function optimizeHand1(chord, rig, follow){
     {...base, dx1:-14, dx2:-7, yaw:15},
     {...base, dx1:-18, dx2:-9, dx3:-3, pitch:15, yK:50},
     {...base, roll:15, zK:-22, yK:40},
+    // セーハ：手を下げて前へ出し、手のひらを上へ向けて、人差し指をまっすぐのばす形からも探す
+    ...(chord.barre ? [{...base, pitch:35, yK:56, zK:2}, {...base, pitch:25, roll:15, yK:50, zK:-4}, {...base, pitch:40, yaw:-10, yK:60, zK:6}] : []),
   ];
   let best = null;
   for(const st of starts){
