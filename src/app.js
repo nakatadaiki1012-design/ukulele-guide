@@ -651,6 +651,12 @@ songSheet.addEventListener('click', e=>{
 });
 /* ソロ弾きのタブ譜（3D画面の下）。「曲デモ」でソロ弾きの曲の時だけ出す */
 const tabStrip = document.getElementById('tabStrip'), tabScroll = document.getElementById('tabScroll');
+// タブ譜の見方（「？ 見方」で開く。外側・✕・Esc で閉じる）
+const tabHelp = document.getElementById('tabHelp');
+document.getElementById('tabHelpBtn').onclick = ()=>{ tabHelp.hidden = false; };
+document.getElementById('tabHelpClose').onclick = ()=>{ tabHelp.hidden = true; };
+tabHelp.addEventListener('click', e=>{ if(e.target === tabHelp) tabHelp.hidden = true; });
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && !tabHelp.hidden){ tabHelp.hidden = true; e.stopPropagation(); } }, true);
 function renderTab(){
   const sg = SONG(), show = !!sg.solo && activeTab() === 'songs';
   tabStrip.hidden = !show;

@@ -185,6 +185,16 @@
   .tabscroll .tn:hover rect,.tabscroll .tn.sel rect{fill:#d8f1ee}
   .tabscroll .tn.now rect{fill:var(--accent)}
   .tabscroll .tn.now text{fill:#fff}
+  .tabhelpbtn{position:absolute;top:3px;right:4px;padding:1px 8px;font-size:11px;border-radius:999px;background:#fffc;color:#6b6158;border:1px solid #d8d0c4}
+  .tabhelpbtn:hover{border-color:var(--accent);color:#1b1410}
+  .help{position:fixed;inset:0;z-index:50;background:#0007;display:flex;align-items:center;justify-content:center;padding:14px}
+  .help[hidden]{display:none}
+  .help-card{background:var(--panel,#fff);color:inherit;border-radius:14px;padding:14px 16px;width:min(520px,100%);max-height:calc(100% - 8px);overflow:auto;box-shadow:0 10px 40px #0006}
+  .help-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:16px}
+  .help-fig{display:block;width:100%;height:auto;margin-bottom:8px}
+  .help-list{margin:0;padding-left:18px;font-size:13px;line-height:1.65}
+  .help-list li+li{margin-top:4px}
+  .help-tip{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:var(--panel2,#f3efe8);font-size:12px;line-height:1.6}
   .tabhead{position:absolute;top:0;bottom:0;left:72px;width:2px;background:var(--accent);opacity:.55;pointer-events:none}
   .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--dim);margin-top:6px;padding:0 2px}
   .legend span{display:inline-flex;align-items:center;gap:4px}
@@ -358,7 +368,7 @@
       <div class="set-group"><span>軽さ（重い端末は「軽い」に）</span><div class="opts" id="optQuality"></div></div>
     </div>
     <!-- ソロ弾きの曲：タブ譜（横にスクロール。演奏中は今の位置が左の線に来るように流れる） -->
-    <div class="tabstrip" id="tabStrip" hidden><div class="tabscroll" id="tabScroll"></div><div class="tabhead"></div></div>
+    <div class="tabstrip" id="tabStrip" hidden><div class="tabscroll" id="tabScroll"></div><div class="tabhead"></div><button class="tabhelpbtn" id="tabHelpBtn" title="タブ譜の見方">？ 見方</button></div>
     <div class="legend">
       <span><i style="background:var(--f1)"></i>1 人差し指</span>
       <span><i style="background:var(--f2)"></i>2 中指</span>
@@ -425,6 +435,39 @@
   </div>
 </div>
 <footer>標準チューニング（G・C・E・A）。右利き用。手の大きさは平均的な大人（コンサートサイズのウクレレ）で計算しています。</footer>
+
+<!-- タブ譜の見方（タブ譜の「？ 見方」から開く。外側か ✕ か Esc で閉じる） -->
+<div class="help" id="tabHelp" hidden>
+  <div class="help-card" role="dialog" aria-label="タブ譜の見方">
+    <div class="help-head"><b>タブ譜の見方</b><button id="tabHelpClose" class="chip" aria-label="閉じる">✕</button></div>
+    <svg viewBox="0 0 340 150" class="help-fig" aria-label="タブ譜の例">
+      <rect width="340" height="150" rx="10" fill="#faf8f3"/>
+      <g stroke="#9a8f84" stroke-width="1"><line x1="60" x2="325" y1="44" y2="44"/><line x1="60" x2="325" y1="62" y2="62"/><line x1="60" x2="325" y1="80" y2="80"/><line x1="60" x2="325" y1="98" y2="98"/></g>
+      <g font-size="11" fill="#8a7f74" text-anchor="middle"><text x="48" y="48">A</text><text x="48" y="66">E</text><text x="48" y="84">C</text><text x="48" y="102">G</text></g>
+      <g font-size="9" fill="#8a7f74" text-anchor="end"><text x="36" y="48">1弦</text><text x="36" y="66">2弦</text><text x="36" y="84">3弦</text><text x="36" y="102">4弦</text></g>
+      <g stroke="#6b6158" stroke-width="1"><line x1="62" x2="62" y1="44" y2="98"/><line x1="232" x2="232" y1="44" y2="98"/></g>
+      <text x="66" y="30" font-size="12" font-weight="800" fill="#13a89e">G</text><text x="236" y="30" font-size="12" font-weight="800" fill="#13a89e">C</text>
+      <g font-size="14" font-weight="800" fill="#1b1410" text-anchor="middle">
+        <rect x="80" y="53" width="16" height="18" rx="4" fill="#faf8f3"/><text x="88" y="67">3</text>
+        <rect x="122" y="35" width="16" height="18" rx="4" fill="#faf8f3"/><text x="130" y="49">0</text>
+        <rect x="164" y="35" width="16" height="18" rx="4" fill="#faf8f3"/><text x="172" y="49">2</text>
+        <rect x="248" y="71" width="16" height="18" rx="4" fill="#faf8f3"/><text x="256" y="85">2</text>
+        <rect x="290" y="53" width="16" height="18" rx="4" fill="#faf8f3"/><text x="298" y="67">0</text>
+      </g>
+      <g font-size="10" fill="#6b6158" text-anchor="middle"><text x="88" y="122">ソ</text><text x="130" y="122">ラ</text><text x="172" y="122">シ</text><text x="256" y="122">レ</text><text x="298" y="122">ミ</text></g>
+      <text x="193" y="142" font-size="10" fill="#8a7f74" text-anchor="middle">左 → 右 の順に弾く</text>
+    </svg>
+    <ul class="help-list">
+      <li><b>4本の線＝4本の弦。</b>上から A・E・C・G 弦（1弦・2弦・3弦・4弦）。ウクレレを構えて上からのぞきこんだ時と<b>上下が逆</b>です（いちばん上の線が、いちばん床に近い A 弦）。</li>
+      <li><b>数字＝押さえるフレット。</b>「3」ならその弦の3フレットを押さえて弾きます。<b>「0」は開放弦</b>（どこも押さえずに弾く）。</li>
+      <li><b>左から右へ順に弾きます。</b>数字と数字の間が広いほど、音を長くのばします。</li>
+      <li><b>縦の線＝小節の区切り。</b>このアプリは4拍子なので、1小節で「1・2・3・4」と数えます。</li>
+      <li><b>線の上の G・C・D など＝伴奏のコード</b>（その小節で鳴っている和音）。</li>
+      <li><b>線の下のドレミ＝その音の名前。</b></li>
+    </ul>
+    <p class="help-tip"><b>このアプリでは：</b>数字を押すとその音が鳴って、左手がその形になります。「▶ ここから演奏」でその音から始まり、← → キー（◀ ▶ ボタン）で1音ずつ移れます。演奏中は、左の緑の線の所がいま弾く音です。押さえる指は、1フレット＝人差し指、2＝中指、3＝薬指、4＝小指が基本です。</p>
+  </div>
+</div>
 
 <!--APP-->
 </body>
