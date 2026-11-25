@@ -285,6 +285,33 @@
   .pattern .st.ghost b{color:#c3ccce}
   .pattern .st.on{background:var(--on);border-color:var(--on)}
   .pattern .st.on b,.pattern .st.on small{color:#fff}
+  /* ストロークの列（練習の譜面・3Dの上のガイド）：↓ジャ＝オレンジ、↑カ＝青、空振り＝点線 */
+  .lane{display:grid;gap:4px;margin-top:8px}
+  .sk{display:block;text-align:center;border-radius:9px;padding:4px 0 3px;border:2px solid transparent;line-height:1.05;transition:transform .08s,box-shadow .08s}
+  .sk b{display:block;font-size:20px;line-height:1}
+  .sk em{display:block;font-style:normal;font-size:12px;font-weight:800;margin-top:1px}
+  .sk small{display:block;font-size:10px;opacity:.8}
+  .sk.dn{background:#ff8a3d;color:#fff}
+  .sk.up{background:#2f9ee0;color:#fff}
+  .sk.gh{background:transparent;border:2px dashed #b9c2c4;color:#9aa6a8}
+  .sk.on{transform:scale(1.1);box-shadow:0 0 0 3px #fff,0 0 16px 6px #ffd34d}
+  .sk.gh.on{border-style:solid;border-color:#9aa6a8;color:#6b7678;background:#eef1f2;box-shadow:0 0 0 3px #fff,0 0 14px 5px #c5ced0}
+  .lanekey{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:6px;font-size:11px;color:var(--sub)}
+  .lanekey .sk{display:inline-flex;align-items:center;gap:2px;padding:1px 6px;font-size:11px;font-weight:800}
+  .lanekey .sk b{font-size:12px;display:inline}
+  .lanekey .sk + .sk{margin-left:6px}
+  .strokelane{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:min(440px,64%);z-index:5;pointer-events:none;
+    background:#ffffffd9;border-radius:12px;padding:4px 6px 5px;box-shadow:0 2px 10px #0002}
+  .strokelane[hidden]{display:none}
+  @media (max-width:560px){ .strokelane{top:44px;width:calc(100% - 16px)} }
+  .swingnote{flex-basis:100%;color:#b8650f;font-weight:700}
+  .swingnote[hidden]{display:none}
+  .strokelane .lane{margin-top:0;gap:3px}
+  .strokelane .sk b{font-size:16px}
+  .strokelane .sk em{font-size:10px}
+  .strokelane .sk small{display:none}
+  .lanetxt{text-align:center;font-size:12px;font-weight:800;margin-top:3px;color:#6b6158}
+  .lanetxt.dn{color:#e8641c} .lanetxt.up{color:#1f7fc0} .lanetxt.gh{color:#7d8a8c}
   .runbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
   .runbar .tempo{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)}
   input[type=range]{accent-color:var(--accent);width:110px}
@@ -338,7 +365,7 @@
       <div id="chordName">C</div>
       <div><div id="chordReading">シー・メジャー</div><div id="difficulty"></div></div>
     </div>
-    <div class="svgwrap" id="mainWrap"><canvas id="handView" aria-label="手の形（3D）"></canvas><div class="overlay" id="mainOverlay"></div><div class="hint">回転：ドラッグ ／ 移動：2本指・右ドラッグ ／ 拡大：ピンチ・ホイール</div><div id="loading" class="loading">3Dの手を準備中…</div>
+    <div class="svgwrap" id="mainWrap"><canvas id="handView" aria-label="手の形（3D）"></canvas><div class="overlay" id="mainOverlay"></div><div class="strokelane" id="strokeLane" hidden><div class="lane"></div><div class="lanetxt"></div></div><div class="hint">回転：ドラッグ ／ 移動：2本指・右ドラッグ ／ 拡大：ピンチ・ホイール</div><div id="loading" class="loading">3Dの手を準備中…</div>
       <button class="vsel" id="angleBtn" title="押すたびに見る向きが変わります">🎥 ななめ</button>
       <button class="vsel vsel2" id="angle2Btn" title="右の画面の向き" hidden>🎥 正面</button>
       <button class="gear" id="gearBtn" title="設定（背景・ウクレレの柄・表示）" aria-label="設定">⚙</button>
@@ -407,11 +434,13 @@
           placeholder="例：C Am F G7（1つ＝1小節）"><small id="customMsg"></small></div>
         <div class="prog-chords" id="progChords"></div>
         <div class="field" style="margin-top:10px"><span>右手</span><select id="patSel"></select></div>
-        <div class="pattern" id="patView"></div>
+        <div class="lane" id="patView"></div>
+        <div class="lanekey"><span class="sk dn"><b>↓</b>ジャ</span>ダウンで弾く<span class="sk up"><b>↑</b>カ</span>アップで弾く<span class="sk gh"><b>↓</b>空</span>空振り（当てずに振る）<span class="swingnote" id="swingNote" hidden>スイング中：↓（表）は長く、↑（裏）は短く ＝「タッカ・タッカ」</span></div>
         <p class="cap" id="patTip"></p>
         <div class="runbar">
           <button class="play big" id="btnProg">▶ スタート</button>
-          <button class="chip swingBtn" title="裏拍を少し遅らせて「タッカ・タッカ」とはずませる">スイング</button>
+          <button class="chip swingBtn" title="裏拍を少し遅らせて「タッカ・タッカ」とはずませる（表が長く・裏が短く）">スイング</button>
+          <button class="chip ghostTickBtn" title="空振りのところで、小さく「シャッ」と鳴らす（空振りのリズムを耳でつかむ練習に）">空振りの音</button>
           <button class="chip speedBtn" title="押すたびに ×1 → ×¾ → ×½ → ×¼（スロー再生）">速さ ×1</button>
           <span class="tempo">テンポ <input type="range" id="bpm" min="40" max="140" value="70"> <span id="bpmVal">70</span></span>
           <div class="beats" id="beats"><div class="beat"></div><div class="beat"></div><div class="beat"></div><div class="beat"></div></div>

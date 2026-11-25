@@ -185,3 +185,17 @@ export function heardTime(){
   if(t < lastHeard) t = lastHeard;                          // 時計が戻らないように
   return (lastHeard = t);
 }
+
+/* 空振りの音（練習用・ごく小さく）：弦に当てずに振った手が空気を切る「シャッ」。空振りのリズムを耳でもつかめるように */
+let ghostBuf = null;
+export function playGhost(when){
+  if(!ghostBuf){
+    const sr = actx.sampleRate, n = Math.floor(sr*0.05), r = rng(77);
+    ghostBuf = actx.createBuffer(1, n, sr); const y = ghostBuf.getChannelData(0);
+    for(let i=0;i<n;i++){ const t = i/n; y[i] = (r()*2-1) * Math.sin(Math.PI*t) * (1-t); }
+  }
+  const src = actx.createBufferSource(); src.buffer = ghostBuf;
+  const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 0.9;
+  const g = actx.createGain(); g.gain.value = 0.10;
+  src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start(when);
+}

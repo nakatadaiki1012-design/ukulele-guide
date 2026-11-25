@@ -2,9 +2,9 @@
    ウクレレ・ハンドガイド（画面の操作・音・説明）
    ========================================================= */
 import { ROOTS, TYPES, getChord, PROGRESSIONS, CHORDS, SONGS, soloShape } from './data.js';
-import { actx, ensureAudio, whenAudioReady, startLead, playString, playStroke, playNote, playBell, click, heardTime } from './audio.js';
+import { actx, ensureAudio, whenAudioReady, startLead, playString, playStroke, playNote, playBell, playGhost, click, heardTime } from './audio.js';
 import { diagramSVG } from './diagram.js';
-import { chordSheetHTML, layoutSheet, tabSVG, tabX, TAB_X0 } from './sheet.js';
+import { chordSheetHTML, layoutSheet, tabSVG, tabX, TAB_X0, laneHTML, laneCols, strokeWord } from './sheet.js';
 import { computePose, blendPose, HAND_CFG, setPoseTable, dumpPoseTable, clearPoseCache } from './pose.js';
 import { POSE_TABLE } from './pose-table.js';
 setPoseTable(POSE_TABLE);   // 計算ずみの手の形（押した時にすぐ出るように）
@@ -18,9 +18,9 @@ import { strY } from './geom.js';
 window.__strumCfg = STRUM_CFG;
 
 const state = {root:'C', type:'', mirror:false, badges:true, ghost:true, rightMode:'always', speed:1, swing:false, split:false, vib:[0,0,0,0],
-               bg:'day', finish:'mahogany', chart:true, pickMode:'name', key:'C', dia:'3'};
+               bg:'day', finish:'mahogany', chart:true, pickMode:'name', key:'C', dia:'3', lane:true, ghostTick:false};
 // 設定は次に開いた時も同じになるように覚えておく（覚えられない端末ではそのまま）
-const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam','pickMode','key','dia'];
+const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam','pickMode','key','dia','lane','ghostTick'];
 try{ const sv = JSON.parse(localStorage.getItem('ukeSettings') || '{}'); for(const k of SAVED) if(k in sv) state[k] = sv[k]; }catch(e){}
 const saveSettings = () => { try{ localStorage.setItem('ukeSettings', JSON.stringify(Object.fromEntries(SAVED.map(k=>[k, state[k]])))); }catch(e){} };
 let view = null;
@@ -218,7 +218,7 @@ state.qlevel = QUALITY_LEVEL;
 choiceRow('optQuality', [['auto', `自動（この端末：${TIERS[DETECTED.tier].label}）`], ...Object.entries(TIERS).map(([k,t])=>[k, t.label])], 'qlevel',
   ()=>{ setQualityLevel(state.qlevel); location.reload(); });
 // オン・オフのボタン
-const TOGGLES = [['split','▥ 2画面'],['ghost','半透明'],['badges','指番号'],['mirror','左右反転'],['chart','コード表']];
+const TOGGLES = [['split','▥ 2画面'],['ghost','半透明'],['badges','指番号'],['mirror','左右反転'],['chart','コード表'],['lane','ストロークのガイド']];
 const showEl = document.getElementById('optShow');
 showEl.innerHTML = TOGGLES.map(([k,l])=>`<button data-k="${k}">${l}</button>`).join('');
 function applyToggles(){
@@ -239,9 +239,15 @@ document.querySelectorAll('.speedBtn').forEach(b=>b.onclick = ()=>{
   document.querySelectorAll('.speedBtn').forEach(x=>{ x.textContent = '速さ ' + SPEEDS[i][1]; x.classList.toggle('on', state.speed !== 1); });
   retime(prog, +bpmEl.value); retime(song, +songBpm.value);
 });
+// 空振りの音（練習用）：オン・オフ
+document.querySelectorAll('.ghostTickBtn').forEach(b=>{ b.classList.toggle('on', state.ghostTick); b.onclick = ()=>{
+  state.ghostTick = !state.ghostTick; saveSettings();
+  document.querySelectorAll('.ghostTickBtn').forEach(x=>x.classList.toggle('on', state.ghostTick));
+}; });
 document.querySelectorAll('.swingBtn').forEach(b=>b.onclick = ()=>{
   state.swing = !state.swing;
   document.querySelectorAll('.swingBtn').forEach(x=>x.classList.toggle('on', state.swing));
+  renderProg(); laneKey = '';
 });
 /* ---------- 全画面：3D画面いっぱいに。コードのボタンと再生ボタンは3D画面の中へ ---------- */
 const fsBtn = document.getElementById('fsBtn'), fsBar = document.getElementById('fsBar');
@@ -438,11 +444,10 @@ function renderProg(){
   progChords.innerHTML = prog.list.map((c,i)=>`<div class="pc" data-i="${i}">${c}</div>`).join('');
   progChords.querySelectorAll('.pc').forEach(el=>el.onclick=()=>{ if(prog.running) return; prog.pos=+el.dataset.i; setChord(prog.list[prog.pos]); });
   // ストロークの譜面（↓↑）
-  const P = PATTERNS[prog.pat];
-  document.getElementById('patView').innerHTML = [...P.p].map((c,i)=>{
-    const cnt = i%2===0 ? (i/2+1) : 'と';
-    return `<div class="st${c==='-'?' ghost':''}"><b>${c==='D'?'↓':c==='U'?'↑':'・'}</b><small>${cnt}</small></div>`;
-  }).join('');
+  const P = PATTERNS[prog.pat], pv = document.getElementById('patView');
+  pv.className = 'lane'; pv.style.gridTemplateColumns = laneCols(P.p.length, state.swing);
+  pv.innerHTML = laneHTML([...P.p], state.swing);
+  document.getElementById('swingNote').hidden = !state.swing;
   document.getElementById('patTip').textContent = P.tip;
   prog.hl = null; highlightProg(-1, -1);
 }
@@ -453,7 +458,7 @@ function highlightProg(pos, slot){
   const beat = slot < 0 ? -1 : slot>>1, next = (pos+1) % prog.list.length;
   progChords.querySelectorAll('.pc').forEach((el,i)=>{ el.classList.toggle('now', i===pos); el.classList.toggle('next', beat===3 && i===next); });
   document.querySelectorAll('#beats .beat').forEach((el,i)=>el.classList.toggle('on', i===beat));
-  document.querySelectorAll('#patView .st').forEach((el,i)=>el.classList.toggle('on', i===slot));
+  document.querySelectorAll('#patView .sk').forEach((el,i)=>el.classList.toggle('on', i===slot));
 }
 const bpmEl = document.getElementById('bpm');
 bpmEl.oninput = ()=>{
@@ -472,6 +477,7 @@ function tickProg(){
     const c = P[slot];
     if(c==='D') playStroke(chord, 'D', when, slot===0 ? 0.34 : 0.28);
     if(c==='U') playStroke(chord, 'U', when, 0.17);
+    if(c==='-' && state.ghostTick) playGhost(when);           // 空振りも小さく「シャッ」と鳴らす（練習用）
     prog.nextSlot++;
   }
 }
@@ -591,14 +597,19 @@ function tickSoloSlot(sg, k, when){
   if(sg.pattern[k] === 'D'){ const n = sg.solo.find(x => Math.round(x[0]*2) === k); if(n) playString(n[2], n[3], when, 0.42); }
 }
 // コード弾き：ストロークのパターンどおりに（最後の小節は1回だけ。アウフタクトの小節は弾かない、「1拍」の小節は1拍目だけ）
+// コード弾きの曲の k 番目の8分音符の弾き方（'D' 'U' '-'＝空振り）
+function songStroke(sg, k){
+  const spb = sg.beats*2, slot = ((k % spb) + spb) % spb, bar = Math.floor(k/spb), last = bar === sg.bars.length-1;
+  if(sg.silentBars?.has(bar)) return '-';
+  if(sg.onceBars?.has(bar) || last) return slot===0 ? 'D' : '-';
+  return sg.pattern[slot];
+}
 function tickChordSlot(sg, k, when){
-  const spb = sg.beats*2, slot = k % spb, bar = Math.floor(k/spb), last = bar === sg.bars.length-1;
-  let st = last ? (slot===0 ? 'D' : '-') : sg.pattern[slot];
-  if(sg.silentBars?.has(bar)) st = '-';
-  else if(sg.onceBars?.has(bar)) st = slot===0 ? 'D' : '-';
+  const slot = k % (sg.beats*2), st = songStroke(sg, k);
   const chord = getChord(chordAt(sg, k));
   if(st==='D') playStroke(chord, 'D', when, slot===0 ? 0.30 : 0.24);
   if(st==='U') playStroke(chord, 'U', when, 0.15);
+  if(st==='-' && state.ghostTick) playGhost(when);
 }
 /* カウントの長さ（8分音符の数）。小節の頭から始める時は1小節（4つ）。
    アウフタクト（小節の途中、たとえば4拍目のソ）から始める時は、その小節の頭から数えて「1・2・3」とカウントしてすぐ入る。
@@ -790,6 +801,26 @@ function rightState(now, pl, ph){
   return idleState(now/1000);
 }
 
+/* ---------- 3D画面の上のストロークのガイド ----------
+   演奏中（練習・コード弾きの曲）に、いまの小節のストロークを並べ、いまの所を光らせる。下に、いまの動きを文字で */
+const laneEl = document.getElementById('strokeLane'), laneRow = laneEl.querySelector('.lane'), laneTxt = laneEl.querySelector('.lanetxt');
+let laneKey = '', laneOn = -1;
+function updateLane(pl, ph){
+  const show = !!pl && state.lane && !(pl.o === song && SONG().solo) && ph >= (pl.start||0) - 2;
+  laneEl.hidden = !show; if(!show){ laneKey = ''; return; }
+  const spb = pl.spb, k = Math.max(0, Math.floor(ph)), bar = Math.floor(k/spb);
+  const strokes = []; for(let s=0; s<spb; s++) strokes.push(pl.o === prog ? PATTERNS[prog.pat].p[s] : songStroke(SONG(), bar*spb + s));
+  const key = strokes.join('') + state.swing;
+  if(key !== laneKey){ laneKey = key; laneOn = -1; laneRow.style.gridTemplateColumns = laneCols(spb, state.swing); laneRow.innerHTML = laneHTML(strokes, state.swing); }
+  const slot = ph < (pl.start||0) ? -1 : k % spb;
+  if(slot !== laneOn){
+    laneOn = slot;
+    laneRow.querySelectorAll('.sk').forEach((el,i)=>el.classList.toggle('on', i===slot));
+    laneTxt.textContent = slot < 0 ? 'カウント…' : strokeWord(strokes[slot], slot % 2 === 0);
+    laneTxt.className = 'lanetxt ' + (slot < 0 ? '' : strokes[slot] === '-' ? 'gh' : slot % 2 === 0 ? 'dn' : 'up');
+  }
+}
+
 /* ---------- 描画ループ（動いている時だけ描き直す） ---------- */
 let dirty = true, raf = 0;
 function kick(){ dirty = true; if(!raf) raf = requestAnimationFrame(loop); }
@@ -844,9 +875,10 @@ function loop(now){
     if(pl){
       pose = musicPose(pl, phL);
       upcoming(pl, phL);
+      updateLane(pl, ph);
       if(pl.o === prog) highlightProg(ph < 0 ? -1 : (prog.pos + Math.floor(ph/8)) % prog.list.length, ph < 0 ? -1 : Math.floor(ph) % 8);
       else { highlightSong(ph < 0 || ph >= pl.end ? -1 : Math.floor(ph/pl.spb)); highlightNote(ph >= pl.end ? -1 : ph); if(SONG().solo) scrollTab(Math.max(0, ph/2)); }
-    } else pose = currentPose(now);
+    } else { pose = currentPose(now); if(!laneEl.hidden) updateLane(null, 0); }
     const right = window.__forceRight || smoothRight(showRight ? rightState(now, pl, phR) : null, now);
     // 全画面では、下のボタンの帯に手が隠れないように、その高さを3D表示に伝える（帯の上に収まるように少し引いて映す）
     const padBottom = fsOn && !state.split ? fsBar.offsetHeight + 12 : 0;

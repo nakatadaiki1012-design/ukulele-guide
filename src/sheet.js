@@ -51,3 +51,25 @@ export function tabSVG(sg){
   });
   return s + '</svg>';
 }
+
+/* ストロークの列：8分音符ごとに、手がどちらへ振るか（表＝↓ダウン・裏＝↑アップ。手はいつも止めずに振る）と、
+   弦に当てて「弾く」か「空振り」かを、色と文字で見分けられるように並べる
+   ・↓ジャ（オレンジ）：ダウンで弾く ・↑カ（青）：アップで弾く ・点線の「空」：空振り（弦の少し上を、当てずに振る）
+   ・スイングの時は、表を長く・裏を短く（タッ・カ）の幅にする */
+export const SWING_R = 0.64;
+export function laneHTML(strokes, swing){
+  return strokes.map((c,i)=>{
+    const down = i % 2 === 0, ghost = c === '-';
+    const cls = ghost ? 'gh' : down ? 'dn' : 'up';
+    const word = ghost ? '空' : down ? 'ジャ' : 'カ';
+    const cnt = down ? (i/2+1) : 'と';
+    return `<div class="sk ${cls}" data-i="${i}"><b>${down ? '↓' : '↑'}</b><em>${word}</em><small>${cnt}</small></div>`;
+  }).join('');
+}
+// 列の幅：スイングの時は表（長い）と裏（短い）
+export const laneCols = (n, swing) => swing ? `repeat(${n/2}, ${Math.round(SWING_R*100)}fr ${Math.round((1-SWING_R)*100)}fr)` : `repeat(${n}, 1fr)`;
+// いまのストロークの説明（3Dの上のガイドの下に出す）
+export function strokeWord(c, down){
+  if(c === '-') return `${down ? '↓' : '↑'} 空振り（弦に当てずに振る）`;
+  return down ? '↓ ジャ（ダウンで弾く）' : '↑ カ（アップで弾く）';
+}
