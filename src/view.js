@@ -283,7 +283,7 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
     // 空振りの時は光らず、右手が少し透ける（弦に当てていないことがわかるように）。手の色は変えない
     const fx = opts.right && opts.rightFx, glow = fx ? fx.glow : 0, op = fx ? fx.opacity : 1;
     strumGlow.visible = glow > 0.02;
-    if(strumGlow.visible){ strumMat.color.set(fx.color); strumMat.opacity = 0.95*glow; strumSpot.material.color.set(fx.color); strumSpot.material.opacity = 0.7*glow; }
+    if(strumGlow.visible){ if(strumGlow._c !== fx.color){ strumGlow._c = fx.color; strumMat.color.set(fx.color); strumSpot.material.color.set(fx.color); } strumMat.opacity = 0.95*glow; strumSpot.material.opacity = 0.7*glow; }
     if(op !== skinR.opacity){ skinR.opacity = op; skinR.depthWrite = op > 0.97; }
     if(opts.right){ const rp = rightHandPose(rigR, opts.right); window.__rp = rp; applyPose(rigR, rp); }
     // コードが変わったら見る中心も少しずらす（カメラごと平行移動）。全体・右手の表示では動かさない

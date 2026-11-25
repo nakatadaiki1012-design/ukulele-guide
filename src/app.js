@@ -807,7 +807,8 @@ const laneEl = document.getElementById('strokeLane'), laneRow = laneEl.querySele
 let laneKey = '', laneOn = -1;
 function updateLane(pl, ph){
   const show = !!pl && state.lane && !(pl.o === song && SONG().solo) && ph >= (pl.start||0) - 2;
-  laneEl.hidden = !show; if(!show){ laneKey = ''; return; }
+  if(laneEl.hidden === show) laneEl.hidden = !show;       // 変わった時だけ書きかえる（毎コマ書くと重い）
+  if(!show){ laneKey = ''; return; }
   const spb = pl.spb, k = Math.max(0, Math.floor(ph)), bar = Math.floor(k/spb);
   const strokes = []; for(let s=0; s<spb; s++) strokes.push(pl.o === prog ? PATTERNS[prog.pat].p[s] : songStroke(SONG(), bar*spb + s));
   const key = strokes.join('') + state.swing;
