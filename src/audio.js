@@ -22,8 +22,39 @@ export function ensureAudio(){
     const notes = []; for(let m=60; m<=84; m++) notes.push(m);
     const warm = () => { if(notes.length){ pluckBuffer(notes.shift()); setTimeout(warm, 40); } };
     setTimeout(warm, 200);
+    startKeepAlive();
   }
   if(actx.state==='suspended') actx.resume();
+}
+/* テレビ（HDMI）やBluetoothのスピーカー対策：
+   音が止まっている間、テレビ側は音声の受け取りを休ませ（省電力）、次に音が来てから起きるまでの最初の0.5〜1秒が切れることがある。
+   耳には聞こえないくらいの、ごく小さなざらざらした音（-75dBくらい）をずっと流しておき、休ませないようにする。
+   画面を見ていない（別のタブ・画面オフ）間は止める */
+let keepGain = null, wokeAt = 0;
+const KEEP_LEVEL = 1.8e-4;
+function startKeepAlive(){
+  const sr = actx.sampleRate, buf = actx.createBuffer(1, sr, sr), y = buf.getChannelData(0), r = rng(4242);
+  for(let i=0;i<y.length;i++) y[i] = (r()*2-1);
+  const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+  keepGain = actx.createGain(); keepGain.gain.value = document.hidden ? 0 : KEEP_LEVEL;
+  src.connect(keepGain); keepGain.connect(actx.destination); src.start();
+  wokeAt = performance.now();
+  document.addEventListener('visibilitychange', ()=>{
+    if(!keepGain) return;
+    keepGain.gain.setValueAtTime(document.hidden ? 0 : KEEP_LEVEL, actx.currentTime);
+    if(!document.hidden){ wokeAt = performance.now(); if(actx.state === 'suspended') actx.resume(); }
+  });
+}
+/* 演奏を始める時、最初の音までに空ける時間（秒）。音を鳴らす準備（またはテレビ側の目覚め）から間もない時は長めに */
+export function startLead(base){
+  const since = (performance.now() - wokeAt)/1000;
+  return Math.max(base, 1.0 - since);
+}
+// 音の準備（再開）が終わってから fn を呼ぶ。終わる前に予定を入れると、最初の音が鳴らないことがある
+export function whenAudioReady(fn){
+  ensureAudio();
+  if(actx.state === 'running') return fn();
+  actx.resume().then(()=>{ wokeAt = performance.now(); fn(); }).catch(()=>fn());
 }
 // 決まった乱数
 function rng(seed){ return ()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; }; }

@@ -2,7 +2,7 @@
    ウクレレ・ハンドガイド（画面の操作・音・説明）
    ========================================================= */
 import { ROOTS, TYPES, getChord, PROGRESSIONS, CHORDS, SONGS, soloShape } from './data.js';
-import { actx, ensureAudio, playString, playStroke, playNote, playBell, click, heardTime } from './audio.js';
+import { actx, ensureAudio, whenAudioReady, startLead, playString, playStroke, playNote, playBell, click, heardTime } from './audio.js';
 import { diagramSVG } from './diagram.js';
 import { chordSheetHTML, layoutSheet, tabSVG, tabX, TAB_X0 } from './sheet.js';
 import { computePose, blendPose, HAND_CFG, setPoseTable, dumpPoseTable, clearPoseCache } from './pose.js';
@@ -475,13 +475,15 @@ function tickProg(){
     prog.nextSlot++;
   }
 }
-function startProg(){
-  ensureAudio(); if(song.running) stopSong();
+function startProg(ready=false){
+  // 音の準備が終わってから始める（終わる前に始めると、最初の音が鳴らないことがある）
+  if(!ready && (!actx || actx.state !== 'running')) return whenAudioReady(()=>startProg(true));
+  if(song.running) stopSong();
   if(view) for(const c of prog.list) computePose(getChord(c), view.rig);   // 手の形を先に計算
   shownChord = '';
   prog.running = true;
   prog.e8 = eighth(+bpmEl.value);
-  prog.t0 = actx.currentTime + 0.45; prog.nextSlot = 0;
+  prog.t0 = actx.currentTime + startLead(0.45); prog.nextSlot = 0;
   setChord(prog.list[prog.pos]);
   document.getElementById('btnProg').textContent = '■ ストップ';
   prog.timer = setInterval(tickProg, 25);
@@ -605,8 +607,9 @@ function countIn(st0, spb){
   const off = ((st0 % spb) + spb) % spb;
   return off === 0 ? spb : off >= 4 ? off : off + spb;
 }
-function startSong(fromBeat=null){
-  ensureAudio(); stopProg();
+function startSong(fromBeat=null, ready=false){
+  if(!ready && (!actx || actx.state !== 'running')) return whenAudioReady(()=>startSong(fromBeat, true));
+  stopProg();
   const sg = SONG();
   // 曲で使うコードの手の形を先に全部計算しておく（演奏中に引っかからないように）
   if(view) for(const b of sg.bars) for(const [c] of b) computePose(getChord(c), view.rig);
@@ -615,7 +618,7 @@ function startSong(fromBeat=null){
   // 始める所（8分音符の番号）。ふつうは曲の頭（アウフタクトの曲は1小節目の途中）。楽譜の音を押した時は、その音から
   const st0 = song.st0 = Math.round((fromBeat ?? (sg.startBeat||0))*2);
   const cin = countIn(st0, sg.beats*2);
-  song.t0 = actx.currentTime + 0.3 + (cin - warp(st0))*song.e8;   // 1小節目の頭の時刻（始まる所の前にカウント）
+  song.t0 = actx.currentTime + startLead(0.3) + (cin - warp(st0))*song.e8;   // 1小節目の頭の時刻（始まる所の前にカウント）
   song.nextSlot = st0 - cin;
   // メロディの開始位置（拍）
   let b = -(sg.pickup||0); song.notes = []; song.mel = 0;
