@@ -821,6 +821,18 @@ function updateLane(pl, ph){
   }
 }
 
+/* 右手の光り方：いちばん近い8分音符が「弾く」なら、弦を通る瞬間にガイドと同じ色（↓ジャ＝オレンジ、↑カ＝青）で光る。
+   「空振り」なら、その振りの間だけ手を半透明にする（弦に当てていないことがわかるように） */
+const FX_COLOR = {D:'#ff7a1f', U:'#1f8fe0'};
+function strokeFx(pl, ph){
+  if(!pl || !state.lane || (pl.o === song && SONG().solo) || ph < (pl.start||0) - 0.5) return null;
+  const k = Math.round(ph), d = ph - k, spb = pl.spb;
+  const st = pl.o === prog ? PATTERNS[prog.pat].p[((k % spb) + spb) % spb] : songStroke(SONG(), k);
+  const a = Math.abs(d);                                      // 弦を通る瞬間（0）からどれだけ離れているか（8分音符の半分まで）
+  if(st === '-') return {glow: 0, opacity: a < 0.3 ? 0.35 : 0.35 + 0.65*Math.min(1, (a-0.3)/0.2), color: null};
+  return {glow: a < 0.15 ? 1 : Math.max(0, 1 - (a-0.15)/0.25), opacity: 1, color: FX_COLOR[k % 2 === 0 ? 'D' : 'U']};
+}
+
 /* ---------- 描画ループ（動いている時だけ描き直す） ---------- */
 let dirty = true, raf = 0;
 function kick(){ dirty = true; if(!raf) raf = requestAnimationFrame(loop); }
@@ -880,9 +892,10 @@ function loop(now){
       else { highlightSong(ph < 0 || ph >= pl.end ? -1 : Math.floor(ph/pl.spb)); highlightNote(ph >= pl.end ? -1 : ph); if(SONG().solo) scrollTab(Math.max(0, ph/2)); }
     } else { pose = currentPose(now); if(!laneEl.hidden) updateLane(null, 0); }
     const right = window.__forceRight || smoothRight(showRight ? rightState(now, pl, phR) : null, now);
+    const rightFx = right ? (window.__forceFx || strokeFx(pl, phR)) : null;       // __forceFx：確認用
     // 全画面では、下のボタンの帯に手が隠れないように、その高さを3D表示に伝える（帯の上に収まるように少し引いて映す）
     const padBottom = fsOn && !state.split ? fsBar.offsetHeight + 12 : 0;
-    view.render(pose, {...state, right, quality, padBottom, animating: handMoving || active});
+    view.render(pose, {...state, right, rightFx, quality, padBottom, animating: handMoving || active});
     dirty = false;
   }
   wasMoving = moving;

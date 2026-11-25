@@ -269,6 +269,16 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
     renderer.shadowMap.needsUpdate = shadowDirty; shadowDirty = false;
     // 右手
     rigR.root.visible = !!opts.right;
+    // 右手の光り方（ストロークのガイドと同じ色）：弾く瞬間はその色で光り、空振りの間は半透明にする
+    const fx = opts.right && opts.rightFx, glow = fx ? fx.glow : 0, op = fx ? fx.opacity : 1;
+    if(glow !== skinR._glow || op !== skinR.opacity || (fx && fx.color !== skinR._col)){
+      skinR._glow = glow; skinR._col = fx && fx.color;
+      // 肌の色そのものもガイドの色へ寄せる（光らせるだけだと、明るい肌では白っぽく見えるため）
+      skinR._base ||= skinR.color.clone();
+      if(glow > 0.01){ skinR.color.copy(skinR._base).lerp(new THREE.Color(fx.color), 0.75*glow); skinR.emissive.set(fx.color).multiplyScalar(0.45*glow); }
+      else { skinR.color.copy(skinR._base); skinR.emissive.setRGB(0,0,0); }
+      skinR.opacity = op; skinR.depthWrite = op > 0.97;
+    }
     if(opts.right){ const rp = rightHandPose(rigR, opts.right); window.__rp = rp; applyPose(rigR, rp); }
     // コードが変わったら見る中心も少しずらす（カメラごと平行移動）。全体・右手の表示では動かさない
     const nt = new THREE.Vector3(...pose.target);
