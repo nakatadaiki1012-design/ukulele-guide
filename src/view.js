@@ -165,6 +165,16 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
       m.ring.visible = m.glow.visible = ghost;
     }
   }
+  // 弾く場所（ストロークの位置）の4本の弦を光らせる印。ふだんは隠しておく
+  const strumGlow = new THREE.Group(), strumMat = new THREE.MeshBasicMaterial({color:'#ff7a1f', transparent:true, depthTest:false, depthWrite:false});
+  for(let s=0;s<4;s++){
+    const L = 46, seg = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, L, 8), strumMat);
+    seg.rotation.z = Math.PI/2; seg.position.set(STRUM_X, strY(s, STRUM_X), stringZ(STRUM_X) + 0.3); seg.renderOrder = 11;
+    strumGlow.add(seg);
+  }
+  const strumSpot = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:'#ff7a1f', transparent:true, depthTest:false, depthWrite:false}));
+  strumSpot.scale.set(70, 70, 1); strumSpot.position.set(STRUM_X, 0, stringZ(STRUM_X) + 1); strumSpot.renderOrder = 10;
+  strumGlow.add(strumSpot); strumGlow.visible = false; scene.add(strumGlow);
   // 右手（ストローク用）。肌の質感は左手と同じ
   const skinR = skin.clone(); skinR.onBeforeCompile = skinLight;
   const rigR = await loadHand(skinR, 'right');
@@ -269,16 +279,12 @@ export async function createView({mainCanvas, mainOverlay, onTap}){
     renderer.shadowMap.needsUpdate = shadowDirty; shadowDirty = false;
     // 右手
     rigR.root.visible = !!opts.right;
-    // 右手の光り方（ストロークのガイドと同じ色）：弾く瞬間はその色で光り、空振りの間は半透明にする
+    // 弾いた所の光り方（ストロークのガイドと同じ色）：弦を通る瞬間、弾く場所の4本の弦が光る（↓ジャ＝オレンジ、↑カ＝青）。
+    // 空振りの時は光らず、右手が少し透ける（弦に当てていないことがわかるように）。手の色は変えない
     const fx = opts.right && opts.rightFx, glow = fx ? fx.glow : 0, op = fx ? fx.opacity : 1;
-    if(glow !== skinR._glow || op !== skinR.opacity || (fx && fx.color !== skinR._col)){
-      skinR._glow = glow; skinR._col = fx && fx.color;
-      // 肌の色そのものもガイドの色へ寄せる（光らせるだけだと、明るい肌では白っぽく見えるため）
-      skinR._base ||= skinR.color.clone();
-      if(glow > 0.01){ skinR.color.copy(skinR._base).lerp(new THREE.Color(fx.color), 0.75*glow); skinR.emissive.set(fx.color).multiplyScalar(0.45*glow); }
-      else { skinR.color.copy(skinR._base); skinR.emissive.setRGB(0,0,0); }
-      skinR.opacity = op; skinR.depthWrite = op > 0.97;
-    }
+    strumGlow.visible = glow > 0.02;
+    if(strumGlow.visible){ strumMat.color.set(fx.color); strumMat.opacity = 0.95*glow; strumSpot.material.color.set(fx.color); strumSpot.material.opacity = 0.7*glow; }
+    if(op !== skinR.opacity){ skinR.opacity = op; skinR.depthWrite = op > 0.97; }
     if(opts.right){ const rp = rightHandPose(rigR, opts.right); window.__rp = rp; applyPose(rigR, rp); }
     // コードが変わったら見る中心も少しずらす（カメラごと平行移動）。全体・右手の表示では動かさない
     const nt = new THREE.Vector3(...pose.target);

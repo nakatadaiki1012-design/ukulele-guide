@@ -821,15 +821,15 @@ function updateLane(pl, ph){
   }
 }
 
-/* 右手の光り方：いちばん近い8分音符が「弾く」なら、弦を通る瞬間にガイドと同じ色（↓ジャ＝オレンジ、↑カ＝青）で光る。
-   「空振り」なら、その振りの間だけ手を半透明にする（弦に当てていないことがわかるように） */
+/* 弾いた所の光り方：いちばん近い8分音符が「弾く」なら、弦を通る瞬間に、弾く場所の弦がガイドと同じ色（↓ジャ＝オレンジ、↑カ＝青）で光る。
+   「空振り」なら光らず、その振りの間だけ右手を少し透けさせる */
 const FX_COLOR = {D:'#ff7a1f', U:'#1f8fe0'};
 function strokeFx(pl, ph){
   if(!pl || !state.lane || (pl.o === song && SONG().solo) || ph < (pl.start||0) - 0.5) return null;
   const k = Math.round(ph), d = ph - k, spb = pl.spb;
   const st = pl.o === prog ? PATTERNS[prog.pat].p[((k % spb) + spb) % spb] : songStroke(SONG(), k);
   const a = Math.abs(d);                                      // 弦を通る瞬間（0）からどれだけ離れているか（8分音符の半分まで）
-  if(st === '-') return {glow: 0, opacity: a < 0.3 ? 0.35 : 0.35 + 0.65*Math.min(1, (a-0.3)/0.2), color: null};
+  if(st === '-') return {glow: 0, opacity: a < 0.3 ? 0.55 : 0.55 + 0.45*Math.min(1, (a-0.3)/0.2), color: null};
   return {glow: a < 0.15 ? 1 : Math.max(0, 1 - (a-0.15)/0.25), opacity: 1, color: FX_COLOR[k % 2 === 0 ? 'D' : 'U']};
 }
 
