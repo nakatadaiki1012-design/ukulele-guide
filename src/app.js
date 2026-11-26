@@ -18,9 +18,9 @@ import { strY } from './geom.js';
 window.__strumCfg = STRUM_CFG;
 
 const state = {root:'C', type:'', mirror:false, badges:true, ghost:true, rightMode:'always', speed:1, swing:false, split:false, vib:[0,0,0,0],
-               bg:'day', finish:'mahogany', chart:true, pickMode:'name', key:'C', dia:'3', lane:true, ghostTick:false};
+               bg:'day', finish:'mahogany', chart:true, pickMode:'name', key:'C', dia:'3', lane:true, ghostTick:false, visAdj:30};
 // 設定は次に開いた時も同じになるように覚えておく（覚えられない端末ではそのまま）
-const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam','pickMode','key','dia','lane','ghostTick'];
+const SAVED = ['mirror','badges','ghost','rightMode','split','bg','finish','chart','cam','pickMode','key','dia','lane','ghostTick','visAdj'];
 try{ const sv = JSON.parse(localStorage.getItem('ukeSettings') || '{}'); for(const k of SAVED) if(k in sv) state[k] = sv[k]; }catch(e){}
 const saveSettings = () => { try{ localStorage.setItem('ukeSettings', JSON.stringify(Object.fromEntries(SAVED.map(k=>[k, state[k]])))); }catch(e){} };
 let view = null;
@@ -217,6 +217,12 @@ choiceRow('optRight', RMODES, 'rightMode', ()=>{});
 state.qlevel = QUALITY_LEVEL;
 choiceRow('optQuality', [['auto', `自動（この端末：${TIERS[DETECTED.tier].label}）`], ...Object.entries(TIERS).map(([k,t])=>[k, t.label])], 'qlevel',
   ()=>{ setQualityLevel(state.qlevel); location.reload(); });
+// 表示のタイミング（音と画面のずれを直す）：− ＋ で10msずつ
+{
+  const el = document.getElementById('optVis'), show = () => el.querySelector('b').textContent = (state.visAdj > 0 ? '＋' : '') + state.visAdj + 'ms';
+  el.querySelectorAll('button').forEach(b=>b.onclick = ()=>{ state.visAdj = Math.max(-200, Math.min(300, state.visAdj + +b.dataset.d)); show(); saveSettings(); });
+  show();
+}
 // オン・オフのボタン
 const TOGGLES = [['split','▥ 2画面'],['ghost','半透明'],['badges','指番号'],['mirror','左右反転'],['chart','コード表'],['lane','ストロークのガイド']];
 const showEl = document.getElementById('optShow');
@@ -375,7 +381,10 @@ document.querySelectorAll('[data-tab]').forEach(b=>b.onclick = ()=>{
 const eighth = bpm => 30/(bpm*state.speed);                 // 8分音符1つの長さ（秒）
 /* スイング：「タッ・カ・タッ・カ」の、裏の8分音符を少し遅らせる。
    u = まっすぐなリズムでの位置（8分音符単位）、warp(u) = スイングした時の時間の位置 */
-const HAND_LEAD_L = 0.12, HAND_LEAD_R = 0.04;                 // 手を音より先に動かす秒数
+const HAND_LEAD_L = 0.12, HAND_LEAD_R = 0.02;
+// 表示のタイミング（秒）：画面に出るまでの遅れの見込み（1コマぶん）＋設定の調整（state.visAdj ミリ秒。＋で表示が早くなる）
+let frameMs = 16;
+const visLead = () => Math.min(0.1, frameMs/1000) + (state.visAdj || 0)/1000;                 // 手を音より先に動かす秒数
 const SWING = 0.64;                                          // 1拍の中で裏拍が来る位置（0.5=まっすぐ、0.667=3連符）
 const swingR = () => state.swing ? SWING : 0.5;
 function warp(u){ const b = Math.floor(u/2), f = u/2 - b, r = swingR();
@@ -816,6 +825,7 @@ function updateLane(pl, ph){
   const slot = ph < (pl.start||0) ? -1 : k % spb;
   if(slot !== laneOn){
     laneOn = slot;
+    if(window.__laneLog && slot >= 0) window.__laneLog.push({late:(heardTime() - pl.o.t0 - warp(k)*pl.o.e8)*1000, frame:frameMs});
     laneRow.querySelectorAll('.sk').forEach((el,i)=>el.classList.toggle('on', i===slot));
     laneTxt.textContent = slot < 0 ? 'カウント…' : strokeWord(strokes[slot], slot % 2 === 0);
     laneTxt.className = 'lanetxt ' + (slot < 0 ? '' : strokes[slot] === '-' ? 'gh' : slot % 2 === 0 ? 'dn' : 'up');
@@ -859,7 +869,8 @@ function loop(now){
   if(!view || !poseTo) return;
   const pl = playing();
   // 手の動きは音より少しだけ先に（目で見て準備できるように）：左手0.12秒・右手0.04秒
-  const tNow = pl ? heardTime() - pl.o.t0 : 0;
+  // 表示は、画面に出るまでの遅れ（次のコマ＋画面の遅れ）の分だけ先の時刻で決める（音とぴったり合うように）。⚙で調整できる
+  const tNow = pl ? heardTime() - pl.o.t0 + visLead() : 0;
   const ph  = pl ? unwarp(tNow/pl.o.e8) : 0;                       // 今どの8分音符か（スイングを戻して数える）
   const phL = pl ? unwarp((tNow + HAND_LEAD_L)/pl.o.e8) : 0;
   const phR = pl ? unwarp((tNow + HAND_LEAD_R)/pl.o.e8) : 0;
@@ -879,6 +890,7 @@ function loop(now){
     } else if(fastRun > 120 && qStep > 0 && canChange){ qStep--; qChanged = now; fastRun = 0; }
     quality = QSTEPS[qStep];
   }
+  frameMs = frameMs*0.9 + Math.min(100, Math.max(4, now - lastFrame))*0.1;
   lastFrame = now;
   // 止まったら、少し待ってからきれいに描き直す（コードを続けて押す時に、そのたび作り直さないように）
   if(moving) clearTimeout(restoreTimer);
